@@ -2,9 +2,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 const navItems = [
-  { path: '/admin',          label: 'Tableau de bord' },
-  { path: '/admin/livres',   label: 'Livres'          },
-  { path: '/admin/emprunts', label: 'Emprunts'        },
+  { path: '/admin',           label: 'Tableau de bord' },
+  { path: '/admin/livres',    label: 'Livres'          },
+  { path: '/admin/membres',   label: 'Membres'         },
+  { path: '/admin/emprunts',  label: 'Emprunts'        },
 ]
 
 function AdminLayout({ children }) {
@@ -23,24 +24,21 @@ function AdminLayout({ children }) {
           <span className="font-bold text-green-800 tracking-tight">
             Bibliothèque-navs CI
           </span>
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {navItems.map(item => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              <Link key={item.path} to={item.path}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                            whitespace-nowrap ${
                   loc.pathname === item.path
                     ? 'bg-green-700 text-white'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-                }`}
-              >
+                }`}>
                 {item.label}
               </Link>
             ))}
-            <button
-              onClick={handleLogout}
-              className="ml-2 px-3 py-1.5 text-sm text-red-500 hover:text-red-700 transition-colors"
-            >
+            <button onClick={handleLogout}
+              className="ml-2 px-3 py-1.5 text-sm text-red-500 hover:text-red-700
+                         transition-colors whitespace-nowrap">
               Déconnexion
             </button>
           </nav>

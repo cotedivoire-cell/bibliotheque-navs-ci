@@ -8,9 +8,9 @@ import RegisterPage   from './pages/public/RegisterPage'
 import ProfilePage    from './pages/public/ProfilePage'
 import DashboardPage  from './pages/admin/DashboardPage'
 import BooksPage      from './pages/admin/BooksPage'
+import MembersPage    from './pages/admin/MembersPage'
 import BorrowingsPage from './pages/admin/BorrowingsPage'
 
-// ── Route protégée admin ───────────────────────────────────────
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
   useEffect(() => {
@@ -32,7 +32,6 @@ function AdminRoute({ children }) {
   return children
 }
 
-// ── Route protégée membre (tout utilisateur connecté) ─────────
 function MemberRoute({ children }) {
   const [status, setStatus] = useState('loading')
   useEffect(() => {
@@ -55,28 +54,24 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-
-        {/* ── Pages publiques ── */}
         <Route path="/"         element={<CatalogPage />}  />
         <Route path="/login"    element={<LoginPage />}    />
         <Route path="/register" element={<RegisterPage />} />
-
-        {/* ── Espace membre (connecté) ── */}
-        <Route path="/profile" element={
+        <Route path="/profile"  element={
           <MemberRoute><ProfilePage /></MemberRoute>
         } />
-
-        {/* ── Pages admin ── */}
         <Route path="/admin" element={
           <AdminRoute><DashboardPage /></AdminRoute>
         } />
         <Route path="/admin/livres" element={
           <AdminRoute><BooksPage /></AdminRoute>
         } />
+        <Route path="/admin/membres" element={
+          <AdminRoute><MembersPage /></AdminRoute>
+        } />
         <Route path="/admin/emprunts" element={
           <AdminRoute><BorrowingsPage /></AdminRoute>
         } />
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

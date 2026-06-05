@@ -6,9 +6,9 @@ import AdminLayout from '../../components/admin/AdminLayout'
 const TODAY = new Date().toISOString().split('T')[0]
 
 const STATUS = {
-  en_cours:  { label: 'En cours',  style: 'bg-blue-50 text-blue-700',   Icon: Clock          },
-  en_retard: { label: 'En retard', style: 'bg-red-50 text-red-700',     Icon: AlertTriangle  },
-  retourné:  { label: 'Retourné',  style: 'bg-green-50 text-green-700', Icon: CheckCircle    },
+  en_cours:  { label: 'En cours',  style: 'bg-blue-50 text-blue-700',   Icon: Clock         },
+  en_retard: { label: 'En retard', style: 'bg-red-50 text-red-700',     Icon: AlertTriangle },
+  retourné:  { label: 'Retourné',  style: 'bg-green-50 text-green-700', Icon: CheckCircle   },
 }
 
 const EMPTY_FORM = {
@@ -29,7 +29,6 @@ function BorrowingsPage() {
   useEffect(() => { loadAll() }, [])
 
   const loadAll = async () => {
-    // Auto-passer en "en_retard" les emprunts dépassés
     await supabase
       .from('borrowings')
       .update({ status: 'en_retard' })
@@ -39,11 +38,11 @@ function BorrowingsPage() {
     const [bRes, mRes, bookRes] = await Promise.all([
       supabase
         .from('borrowings')
-        .select('*, books(id, title, cover_url, available_copies), profiles(full_name)')
+        .select('*, books(id, title, cover_url, available_copies), profiles(full_name, membership_type)')
         .order('created_at', { ascending: false }),
       supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, membership_type')
         .order('full_name'),
       supabase
         .from('books')
@@ -59,12 +58,14 @@ function BorrowingsPage() {
     setLoading(false)
   }
 
-  // ── Créer un emprunt ────────────────────────────────────────
+  // Membre sélectionné dans le formulaire
+  const selectedMember = members.find(m => m.id === form.member_id)
+  const memberIsAnnual = selectedMember?.membership_type === 'annual'
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError('')
-
     try {
       const { error: insertError } = await supabase.from('borrowings').insert([{
         member_id:   form.member_id,
@@ -77,7 +78,6 @@ function BorrowingsPage() {
       }])
       if (insertError) throw insertError
 
-      // Décrémenter les exemplaires disponibles
       const { data: book } = await supabase
         .from('books').select('available_copies').eq('id', form.book_id).single()
       await supabase
@@ -94,20 +94,17 @@ function BorrowingsPage() {
     setSaving(false)
   }
 
-  // ── Valider un retour ───────────────────────────────────────
   const handleReturn = async (borrowing) => {
     await supabase
       .from('borrowings')
       .update({ status: 'retourné', returned_at: TODAY })
       .eq('id', borrowing.id)
-
     const { data: book } = await supabase
       .from('books').select('available_copies').eq('id', borrowing.book_id).single()
     await supabase
       .from('books')
       .update({ available_copies: book.available_copies + 1 })
       .eq('id', borrowing.book_id)
-
     loadAll()
   }
 
@@ -118,13 +115,10 @@ function BorrowingsPage() {
   return (
     <AdminLayout>
 
-      {/* En-tête */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Emprunts</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {activeCount} emprunt(s) en cours
-          </p>
+          <p className="text-slate-400 text-sm mt-1">{activeCount} en cours</p>
         </div>
         <button
           onClick={() => { setShowForm(v => !v); setError('') }}
@@ -162,6 +156,23 @@ function BorrowingsPage() {
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
+
+              {/* Indicateur d'adhésion du membre sélectionné */}
+              {selectedMember && (
+                <div className={`mt-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 ${
+                  memberIsAnnual
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-slate-50 text-slate-600 border border-slate-200'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    memberIsAnnual ? 'bg-amber-500' : 'bg-slate-400'
+                  }`} />
+                  {memberIsAnnual
+                    ? 'Abonnement annuel — pas de frais de location'
+                    : "À l'unité — location payante"
+                  }
+                </div>
+              )}
             </div>
 
             {/* Livre */}
@@ -179,9 +190,7 @@ function BorrowingsPage() {
                 ))}
               </select>
               {books.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Aucun livre disponible pour le moment.
-                </p>
+                <p className="text-xs text-amber-600 mt-1">Aucun livre disponible.</p>
               )}
             </div>
 
@@ -192,8 +201,8 @@ function BorrowingsPage() {
               </label>
               <div className="flex gap-3">
                 {[
-                  { value: 'location',    label: "Location à l'unité" },
-                  { value: 'abonnement',  label: 'Abonnement annuel'  },
+                  { value: 'location',   label: "Location à l'unité" },
+                  { value: 'abonnement', label: 'Abonnement annuel'  },
                 ].map(opt => (
                   <button key={opt.value} type="button"
                     onClick={() => setForm(p => ({ ...p, loan_type: opt.value }))}
@@ -208,7 +217,7 @@ function BorrowingsPage() {
               </div>
             </div>
 
-            {/* Montant (location uniquement) */}
+            {/* Montant */}
             {form.loan_type === 'location' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -234,11 +243,10 @@ function BorrowingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Date limite de retour *
+                  Date limite *
                 </label>
-                <input type="date" required value={form.due_date}
+                <input type="date" required value={form.due_date} min={form.borrowed_at}
                   onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
-                  min={form.borrowed_at}
                   className="w-full border border-slate-200 px-4 py-2.5 text-sm
                              focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
@@ -269,24 +277,17 @@ function BorrowingsPage() {
 
             return (
               <div key={b.id}
-                className={`bg-white rounded-2xl border shadow-sm p-4
-                            flex items-center gap-4 transition-shadow hover:shadow-md ${
+                className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-4 ${
                   b.status === 'en_retard' ? 'border-red-200' : 'border-slate-100'
                 }`}>
-
-                {/* Couverture */}
                 <div className="w-10 h-14 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
                   {b.books?.cover_url
                     ? <img src={b.books.cover_url} alt="" className="w-full h-full object-cover" />
                     : <div className="w-full h-full bg-slate-200" />
                   }
                 </div>
-
-                {/* Infos */}
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900 text-sm truncate">
-                    {b.books?.title}
-                  </p>
+                  <p className="font-semibold text-slate-900 text-sm truncate">{b.books?.title}</p>
                   <p className="text-slate-400 text-xs">{b.profiles?.full_name}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5
@@ -295,16 +296,13 @@ function BorrowingsPage() {
                       {cfg.label}
                     </span>
                     <span className="text-xs text-slate-400">
-                      Retour prévu : {new Date(b.due_date).toLocaleDateString('fr-FR')}
+                      {new Date(b.due_date).toLocaleDateString('fr-FR')}
                     </span>
-                    <span className="text-xs text-slate-300 capitalize">
-                      {b.loan_type}
-                      {b.amount_paid > 0 && ` · ${b.amount_paid.toLocaleString('fr-FR')} FCFA`}
-                    </span>
+                    {b.profiles?.membership_type === 'annual' && (
+                      <span className="text-xs text-amber-600 font-medium">Abonné</span>
+                    )}
                   </div>
                 </div>
-
-                {/* Bouton retour */}
                 {isActive && (
                   <button onClick={() => handleReturn(b)}
                     className="flex-shrink-0 px-3 py-1.5 bg-green-50 text-green-700
