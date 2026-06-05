@@ -2,11 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
-import CatalogPage     from './pages/public/CatalogPage'
-import LoginPage       from './pages/public/LoginPage'
-import DashboardPage   from './pages/admin/DashboardPage'
-import BooksPage       from './pages/admin/BooksPage'
-import BorrowingsPage  from './pages/admin/BorrowingsPage'
+import CatalogPage    from './pages/public/CatalogPage'
+import LoginPage      from './pages/public/LoginPage'
+import RegisterPage   from './pages/public/RegisterPage'
+import DashboardPage  from './pages/admin/DashboardPage'
+import BooksPage      from './pages/admin/BooksPage'
+import BorrowingsPage from './pages/admin/BorrowingsPage'
 
 function ProtectedRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -35,9 +36,12 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"      element={<CatalogPage />} />
-        <Route path="/login" element={<LoginPage />}   />
+        {/* Pages publiques */}
+        <Route path="/"          element={<CatalogPage />}   />
+        <Route path="/login"     element={<LoginPage />}     />
+        <Route path="/register"  element={<RegisterPage />}  />
 
+        {/* Pages admin protégées */}
         <Route path="/admin" element={
           <ProtectedRoute><DashboardPage /></ProtectedRoute>
         } />
