@@ -5,13 +5,14 @@ import { supabase } from './lib/supabase'
 import CatalogPage    from './pages/public/CatalogPage'
 import LoginPage      from './pages/public/LoginPage'
 import RegisterPage   from './pages/public/RegisterPage'
+import ProfilePage    from './pages/public/ProfilePage'
 import DashboardPage  from './pages/admin/DashboardPage'
 import BooksPage      from './pages/admin/BooksPage'
 import BorrowingsPage from './pages/admin/BorrowingsPage'
 
-function ProtectedRoute({ children }) {
+// ── Route protégée admin ───────────────────────────────────────
+function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
-
   useEffect(() => {
     const check = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -22,10 +23,28 @@ function ProtectedRoute({ children }) {
     }
     check()
   }, [])
-
   if (status === 'loading') return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <p className="text-slate-400 text-sm">Vérification en cours...</p>
+    </div>
+  )
+  if (status === 'unauthorized') return <Navigate to="/login" replace />
+  return children
+}
+
+// ── Route protégée membre (tout utilisateur connecté) ─────────
+function MemberRoute({ children }) {
+  const [status, setStatus] = useState('loading')
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setStatus(user ? 'ok' : 'unauthorized')
+    }
+    check()
+  }, [])
+  if (status === 'loading') return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <p className="text-gray-400 text-sm">Chargement...</p>
     </div>
   )
   if (status === 'unauthorized') return <Navigate to="/login" replace />
@@ -36,20 +55,26 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Pages publiques */}
-        <Route path="/"          element={<CatalogPage />}   />
-        <Route path="/login"     element={<LoginPage />}     />
-        <Route path="/register"  element={<RegisterPage />}  />
 
-        {/* Pages admin protégées */}
+        {/* ── Pages publiques ── */}
+        <Route path="/"         element={<CatalogPage />}  />
+        <Route path="/login"    element={<LoginPage />}    />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* ── Espace membre (connecté) ── */}
+        <Route path="/profile" element={
+          <MemberRoute><ProfilePage /></MemberRoute>
+        } />
+
+        {/* ── Pages admin ── */}
         <Route path="/admin" element={
-          <ProtectedRoute><DashboardPage /></ProtectedRoute>
+          <AdminRoute><DashboardPage /></AdminRoute>
         } />
         <Route path="/admin/livres" element={
-          <ProtectedRoute><BooksPage /></ProtectedRoute>
+          <AdminRoute><BooksPage /></AdminRoute>
         } />
         <Route path="/admin/emprunts" element={
-          <ProtectedRoute><BorrowingsPage /></ProtectedRoute>
+          <AdminRoute><BorrowingsPage /></AdminRoute>
         } />
 
         <Route path="*" element={<Navigate to="/" replace />} />
