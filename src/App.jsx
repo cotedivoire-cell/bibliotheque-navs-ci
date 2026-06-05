@@ -10,6 +10,7 @@ import DashboardPage  from './pages/admin/DashboardPage'
 import BooksPage      from './pages/admin/BooksPage'
 import MembersPage    from './pages/admin/MembersPage'
 import BorrowingsPage from './pages/admin/BorrowingsPage'
+import FinancePage    from './pages/admin/FinancePage'
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -17,8 +18,7 @@ function AdminRoute({ children }) {
     const check = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setStatus('unauthorized'); return }
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       setStatus(profile?.role === 'admin' ? 'admin' : 'unauthorized')
     }
     check()
@@ -57,21 +57,12 @@ function App() {
         <Route path="/"         element={<CatalogPage />}  />
         <Route path="/login"    element={<LoginPage />}    />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/profile"  element={
-          <MemberRoute><ProfilePage /></MemberRoute>
-        } />
-        <Route path="/admin" element={
-          <AdminRoute><DashboardPage /></AdminRoute>
-        } />
-        <Route path="/admin/livres" element={
-          <AdminRoute><BooksPage /></AdminRoute>
-        } />
-        <Route path="/admin/membres" element={
-          <AdminRoute><MembersPage /></AdminRoute>
-        } />
-        <Route path="/admin/emprunts" element={
-          <AdminRoute><BorrowingsPage /></AdminRoute>
-        } />
+        <Route path="/profile"  element={<MemberRoute><ProfilePage /></MemberRoute>} />
+        <Route path="/admin"         element={<AdminRoute><DashboardPage /></AdminRoute>} />
+        <Route path="/admin/livres"  element={<AdminRoute><BooksPage /></AdminRoute>} />
+        <Route path="/admin/membres" element={<AdminRoute><MembersPage /></AdminRoute>} />
+        <Route path="/admin/emprunts"element={<AdminRoute><BorrowingsPage /></AdminRoute>} />
+        <Route path="/admin/finances"element={<AdminRoute><FinancePage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
