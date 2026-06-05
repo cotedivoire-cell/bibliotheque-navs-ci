@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle, Clock, Pencil, Trash2, X, Check } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Pencil, Trash2, X, Check, ScanLine, RotateCcw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
+import BookScanner from '../../components/BookScanner'
 
 const TODAY = new Date().toISOString().split('T')[0]
 
@@ -25,10 +26,15 @@ function BorrowingsPage() {
   const [saving,        setSaving]        = useState(false)
   const [error,         setError]         = useState('')
   const [form,          setForm]          = useState(EMPTY_FORM)
-  const [editingDate,   setEditingDate]   = useState(null)  // id emprunt en cours d'édition
+  const [editingDate,   setEditingDate]   = useState(null)
   const [newDueDate,    setNewDueDate]    = useState('')
-  const [confirmDelete, setConfirmDelete] = useState(null)  // id emprunt à supprimer
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting,      setDeleting]      = useState(null)
+
+  // ── États scan ──
+  const [scanMode,    setScanMode]    = useState(null) // null | 'borrow' | 'return'
+  const [scanMsg,     setScanMsg]     = useState('')   // message résultat scan
+  const [scanSuccess, setScanSuccess] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -41,7 +47,9 @@ function BorrowingsPage() {
         .select('*, books(id, title, cover_url, available_copies), profiles(full_name, membership_type)')
         .order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, membership_type').order('full_name'),
-      supabase.from('books').select('id, title, available_copies').eq('is_active', true).gt('available_copies', 0).order('title'),
+      supabase.from('books')
+        .select('id, title, available_copies, isbn')
+        .eq('is_active', true).gt('available_copies', 0).order('title'),
     ])
 
     setBorrowings(bRes.data || [])
@@ -50,8 +58,80 @@ function BorrowingsPage() {
     setLoading(false)
   }
 
-  const selectedMember  = members.find(m => m.id === form.member_id)
-  const memberIsAnnual  = selectedMember?.membership_type === 'annual'
+  // ── Recherche livre par ISBN ou UUID ──────────────────────
+  const findBook = async (code) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    let query = supabase.from('books').select('*, categories(name)')
+
+    if (uuidRegex.test(code)) {
+      query = query.eq('id', code)
+    } else {
+      query = query.eq('isbn', code)
+    }
+
+    const { data } = await query.eq('is_active', true).maybeSingle()
+    return data
+  }
+
+  // ── Résultat du scan ──────────────────────────────────────
+  const handleScanResult = async (code) => {
+    setScanMode(null) // ferme scanner
+    setScanMsg('')
+    setScanSuccess(false)
+
+    const book = await findBook(code)
+
+    if (!book) {
+      setScanMsg(`Aucun livre trouvé pour le code "${code.slice(0, 20)}...". Vérifiez que l'ISBN est renseigné dans la fiche du livre.`)
+      return
+    }
+
+    if (scanMode === 'borrow') {
+      // ── Mode emprunt ──
+      if (book.available_copies <= 0) {
+        setScanMsg(`"${book.title}" n'est pas disponible en ce moment.`)
+        return
+      }
+      setForm(p => ({ ...p, book_id: book.id }))
+      setShowForm(true)
+      setScanSuccess(true)
+      setScanMsg(`Livre détecté : "${book.title}" — complétez le formulaire ci-dessous.`)
+    } else if (scanMode === 'return') {
+      // ── Mode retour rapide ──
+      const { data: activeBorrow } = await supabase
+        .from('borrowings')
+        .select('*, profiles(full_name)')
+        .eq('book_id', book.id)
+        .in('status', ['en_cours', 'en_retard'])
+        .order('borrowed_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (!activeBorrow) {
+        setScanMsg(`"${book.title}" n'a aucun emprunt actif à valider.`)
+        return
+      }
+
+      // Valider le retour
+      await supabase.from('borrowings')
+        .update({ status: 'retourné', returned_at: TODAY })
+        .eq('id', activeBorrow.id)
+
+      const { data: bookData } = await supabase
+        .from('books').select('available_copies').eq('id', book.id).single()
+      await supabase.from('books')
+        .update({ available_copies: bookData.available_copies + 1 })
+        .eq('id', book.id)
+
+      setScanSuccess(true)
+      setScanMsg(`Retour validé — "${book.title}" rendu par ${activeBorrow.profiles?.full_name}.`)
+      loadAll()
+    }
+  }
+
+  const selectedMember = members.find(m => m.id === form.member_id)
+  const memberIsAnnual = selectedMember?.membership_type === 'annual'
 
   // ── Créer un emprunt ──
   const handleSubmit = async (e) => {
@@ -73,6 +153,7 @@ function BorrowingsPage() {
       await supabase.from('books').update({ available_copies: book.available_copies - 1 }).eq('id', form.book_id)
       setForm(EMPTY_FORM)
       setShowForm(false)
+      setScanMsg('')
       loadAll()
     } catch {
       setError("Erreur lors de la création de l'emprunt.")
@@ -80,7 +161,7 @@ function BorrowingsPage() {
     setSaving(false)
   }
 
-  // ── Retour d'un livre ──
+  // ── Retour manuel ──
   const handleReturn = async (borrowing) => {
     await supabase.from('borrowings').update({ status: 'retourné', returned_at: TODAY }).eq('id', borrowing.id)
     const { data: book } = await supabase.from('books').select('available_copies').eq('id', borrowing.book_id).single()
@@ -88,21 +169,20 @@ function BorrowingsPage() {
     loadAll()
   }
 
-  // ── Modifier la date limite ──
-  const handleSaveDate = async (borrowingId) => {
+  // ── Modifier date limite ──
+  const handleSaveDate = async (id) => {
     if (!newDueDate) return
     await supabase.from('borrowings')
       .update({ due_date: newDueDate, status: newDueDate >= TODAY ? 'en_cours' : 'en_retard' })
-      .eq('id', borrowingId)
+      .eq('id', id)
     setEditingDate(null)
     setNewDueDate('')
     loadAll()
   }
 
-  // ── Supprimer un emprunt ──
+  // ── Supprimer ──
   const handleDelete = async (borrowing) => {
     setDeleting(borrowing.id)
-    // Remettre l'exemplaire disponible si l'emprunt était actif
     if (borrowing.status !== 'retourné') {
       const { data: book } = await supabase.from('books').select('available_copies').eq('id', borrowing.book_id).single()
       if (book) await supabase.from('books').update({ available_copies: book.available_copies + 1 }).eq('id', borrowing.book_id)
@@ -117,28 +197,89 @@ function BorrowingsPage() {
 
   return (
     <AdminLayout>
-      <div className="flex items-center justify-between mb-8">
+
+      {/* ── Scanner overlay ── */}
+      {scanMode && (
+        <BookScanner
+          title={scanMode === 'borrow' ? 'Scanner pour emprunt' : 'Scanner pour retour rapide'}
+          onResult={handleScanResult}
+          onClose={() => setScanMode(null)}
+        />
+      )}
+
+      {/* ── En-tête ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Emprunts</h1>
           <p className="text-slate-400 text-sm mt-1">{activeCount} en cours</p>
         </div>
-        <button onClick={() => { setShowForm(v => !v); setError('') }}
-          className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-            showForm ? 'bg-slate-200 text-slate-700' : 'bg-green-700 text-white hover:bg-green-800 shadow-sm'
-          }`}>
-          {showForm ? 'Annuler' : '+ Créer un emprunt'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* Scanner retour rapide */}
+          <button
+            onClick={() => { setScanMode('return'); setScanMsg(''); setScanSuccess(false) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                       border border-amber-200 bg-amber-50 text-amber-700
+                       hover:bg-amber-100 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Retour rapide
+          </button>
+          {/* Scanner emprunt */}
+          <button
+            onClick={() => { setScanMode('borrow'); setScanMsg(''); setScanSuccess(false) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                       border border-blue-200 bg-blue-50 text-blue-700
+                       hover:bg-blue-100 transition-colors"
+          >
+            <ScanLine className="w-4 h-4" />
+            Scanner un livre
+          </button>
+          {/* Emprunt manuel */}
+          <button
+            onClick={() => { setShowForm(v => !v); setError(''); setScanMsg('') }}
+            className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              showForm ? 'bg-slate-200 text-slate-700' : 'bg-green-700 text-white hover:bg-green-800 shadow-sm'
+            }`}
+          >
+            {showForm ? 'Annuler' : '+ Créer manuellement'}
+          </button>
+        </div>
       </div>
 
-      {/* Formulaire */}
+      {/* ── Message résultat scan ── */}
+      {scanMsg && (
+        <div className={`px-4 py-3 rounded-xl mb-5 text-sm flex items-start gap-3 ${
+          scanSuccess
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-red-50 border border-red-200 text-red-600'
+        }`}>
+          <span className="flex-1">{scanMsg}</span>
+          <button onClick={() => setScanMsg('')} className="flex-shrink-0 opacity-60 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Formulaire emprunt ── */}
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8">
-          <h2 className="text-base font-semibold text-slate-800 mb-6">Nouvel emprunt</h2>
-          {error && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">{error}</div>}
+          <h2 className="text-base font-semibold text-slate-800 mb-6">
+            {form.book_id ? 'Finaliser l\'emprunt (livre pré-sélectionné)' : 'Nouvel emprunt'}
+          </h2>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
+
+            {/* Membre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Membre *</label>
-              <select required value={form.member_id} onChange={e => setForm(p => ({ ...p, member_id: e.target.value }))}
+              <select required value={form.member_id}
+                onChange={e => setForm(p => ({ ...p, member_id: e.target.value }))}
                 className="w-full border border-slate-200 px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">Sélectionner un membre</option>
                 {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
@@ -152,14 +293,24 @@ function BorrowingsPage() {
                 </div>
               )}
             </div>
+
+            {/* Livre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Livre *</label>
-              <select required value={form.book_id} onChange={e => setForm(p => ({ ...p, book_id: e.target.value }))}
-                className="w-full border border-slate-200 px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
+              <select required value={form.book_id}
+                onChange={e => setForm(p => ({ ...p, book_id: e.target.value }))}
+                className={`w-full border px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                  form.book_id ? 'border-green-500 bg-green-50' : 'border-slate-200'
+                }`}>
                 <option value="">Sélectionner un livre disponible</option>
                 {books.map(b => <option key={b.id} value={b.id}>{b.title} — {b.available_copies} dispo.</option>)}
               </select>
+              {form.book_id && (
+                <p className="text-xs text-green-600 mt-1 font-medium">Livre pré-sélectionné par le scan</p>
+              )}
             </div>
+
+            {/* Type emprunt */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Type d'emprunt *</label>
               <div className="flex gap-3">
@@ -174,6 +325,7 @@ function BorrowingsPage() {
                 ))}
               </div>
             </div>
+
             {form.loan_type === 'location' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Montant payé (FCFA)</label>
@@ -182,6 +334,7 @@ function BorrowingsPage() {
                   className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
             )}
+
             <div className="grid grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Date d'emprunt *</label>
@@ -196,6 +349,7 @@ function BorrowingsPage() {
                   className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
             </div>
+
             <button type="submit" disabled={saving}
               className="w-full bg-green-700 text-white py-3 text-sm font-semibold hover:bg-green-800 transition-all disabled:opacity-50">
               {saving ? 'Enregistrement...' : "Créer l'emprunt"}
@@ -204,7 +358,7 @@ function BorrowingsPage() {
         </div>
       )}
 
-      {/* Liste des emprunts */}
+      {/* ── Liste des emprunts ── */}
       {loading ? (
         <p className="text-slate-400 text-sm">Chargement...</p>
       ) : borrowings.length === 0 ? (
@@ -212,11 +366,9 @@ function BorrowingsPage() {
       ) : (
         <div className="space-y-3">
           {borrowings.map(b => {
-            const cfg       = STATUS[b.status] || STATUS.en_cours
+            const cfg        = STATUS[b.status] || STATUS.en_cours
             const StatusIcon = cfg.Icon
-            const isActive  = b.status === 'en_cours' || b.status === 'en_retard'
-            const isEditingThis = editingDate === b.id
-            const isConfirmingDelete = confirmDelete === b.id
+            const isActive   = b.status === 'en_cours' || b.status === 'en_retard'
 
             return (
               <div key={b.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${
@@ -226,8 +378,7 @@ function BorrowingsPage() {
                   <div className="w-10 h-14 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
                     {b.books?.cover_url
                       ? <img src={b.books.cover_url} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full bg-slate-200" />
-                    }
+                      : <div className="w-full h-full bg-slate-200" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-900 text-sm truncate">{b.books?.title}</p>
@@ -240,12 +391,8 @@ function BorrowingsPage() {
                       <span className="text-xs text-slate-400">
                         {new Date(b.due_date).toLocaleDateString('fr-FR')}
                       </span>
-                      {b.profiles?.membership_type === 'annual' && (
-                        <span className="text-xs text-amber-600 font-medium">Abonné</span>
-                      )}
                     </div>
                   </div>
-                  {/* Boutons action */}
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     {isActive && (
                       <button onClick={() => handleReturn(b)}
@@ -256,22 +403,19 @@ function BorrowingsPage() {
                     <div className="flex gap-1">
                       {isActive && (
                         <button onClick={() => { setEditingDate(b.id); setNewDueDate(b.due_date) }}
-                          className="p-1.5 text-slate-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Modifier la date limite">
+                          className="p-1.5 text-slate-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <button onClick={() => setConfirmDelete(b.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Supprimer">
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* ── Modifier date limite ── */}
-                {isEditingThis && (
+                {editingDate === b.id && (
                   <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3">
                     <div className="flex-1">
                       <label className="block text-xs text-slate-500 mb-1">Nouvelle date limite</label>
@@ -292,12 +436,10 @@ function BorrowingsPage() {
                   </div>
                 )}
 
-                {/* ── Confirmer suppression ── */}
-                {isConfirmingDelete && (
+                {confirmDelete === b.id && (
                   <div className="mt-3 pt-3 border-t border-red-100 flex items-center justify-between">
                     <p className="text-xs text-red-600 font-medium">
-                      Supprimer cet emprunt ?
-                      {b.status !== 'retourné' && ' Le stock sera restauré.'}
+                      Supprimer cet emprunt ?{b.status !== 'retourné' && ' Le stock sera restauré.'}
                     </p>
                     <div className="flex gap-2">
                       <button onClick={() => setConfirmDelete(null)}

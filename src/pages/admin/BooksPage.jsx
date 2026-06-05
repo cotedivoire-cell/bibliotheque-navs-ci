@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Pencil, Trash2 } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, QrCode } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
 
 const EMPTY_FORM = {
   title: '', author: '', category_id: '', language: 'FR',
-  summary: '', total_copies: 1, rental_price: 0,
+  summary: '', total_copies: 1, rental_price: 0, isbn: '',
 }
 
 function BooksPage() {
@@ -22,11 +22,10 @@ function BooksPage() {
   const [showNewCat,   setShowNewCat]   = useState(false)
   const [newCatName,   setNewCatName]   = useState('')
   const [savingCat,    setSavingCat]    = useState(false)
-
-  // ── États edit / delete ──
-  const [editingBook,   setEditingBook]   = useState(null) // null = mode ajout
-  const [confirmDelete, setConfirmDelete] = useState(null) // id du livre à confirmer
+  const [editingBook,   setEditingBook]   = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting,      setDeleting]      = useState(null)
+  const [qrBook,        setQrBook]        = useState(null) // livre dont on affiche le QR
 
   useEffect(() => { loadAll() }, [])
 
@@ -40,17 +39,17 @@ function BooksPage() {
     setLoading(false)
   }
 
-  // ── Ouvrir le formulaire en mode édition ──
   const handleEdit = (book) => {
     setEditingBook(book)
     setForm({
-      title:        book.title        || '',
-      author:       book.author       || '',
-      category_id:  book.category_id  || '',
-      language:     book.language     || 'FR',
-      summary:      book.summary      || '',
+      title:        book.title || '',
+      author:       book.author || '',
+      category_id:  book.category_id || '',
+      language:     book.language || 'FR',
+      summary:      book.summary || '',
       total_copies: book.total_copies,
       rental_price: book.rental_price || 0,
+      isbn:         book.isbn || '',
     })
     setCoverPreview(book.cover_url || null)
     setCoverFile(null)
@@ -60,7 +59,6 @@ function BooksPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // ── Réinitialiser le formulaire ──
   const resetForm = () => {
     setShowForm(false)
     setEditingBook(null)
@@ -70,12 +68,10 @@ function BooksPage() {
     setError('')
   }
 
-  // ── Créer une nouvelle catégorie ──
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return
     setSavingCat(true)
-    const { data, error } = await supabase
-      .from('categories').insert([{ name: newCatName.trim() }]).select().single()
+    const { data, error } = await supabase.from('categories').insert([{ name: newCatName.trim() }]).select().single()
     if (!error && data) {
       setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
       setForm(prev => ({ ...prev, category_id: data.id }))
@@ -85,7 +81,6 @@ function BooksPage() {
     setSavingCat(false)
   }
 
-  // ── Upload couverture ──
   const handleCoverChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -96,72 +91,50 @@ function BooksPage() {
   const uploadCover = async (file) => {
     const ext = file.name.split('.').pop()
     const fileName = `${Date.now()}.${ext}`
-    const { error } = await supabase.storage
-      .from('covers').upload(fileName, file, { cacheControl: '3600', upsert: false })
+    const { error } = await supabase.storage.from('covers').upload(fileName, file, { cacheControl: '3600', upsert: false })
     if (error) throw error
     const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(fileName)
     return publicUrl
   }
 
-  // ── Soumettre (ajout ou modification) ──
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError('')
     setSuccess('')
-
     try {
       let cover_url = editingBook?.cover_url || null
       if (coverFile) cover_url = await uploadCover(coverFile)
 
       if (editingBook) {
-        // ── Mode édition ──
         const booksOnLoan = editingBook.total_copies - editingBook.available_copies
         const newAvailable = Math.max(0, parseInt(form.total_copies) - booksOnLoan)
-
-        const { error: updateError } = await supabase
-          .from('books')
-          .update({
-            title:            form.title,
-            author:           form.author,
-            category_id:      form.category_id || null,
-            language:         form.language,
-            summary:          form.summary,
-            total_copies:     parseInt(form.total_copies),
-            available_copies: newAvailable,
-            rental_price:     parseInt(form.rental_price) || 0,
-            cover_url,
-          })
-          .eq('id', editingBook.id)
-
+        const { error: updateError } = await supabase.from('books').update({
+          title: form.title, author: form.author, category_id: form.category_id || null,
+          language: form.language, summary: form.summary, isbn: form.isbn || null,
+          total_copies: parseInt(form.total_copies), available_copies: newAvailable,
+          rental_price: parseInt(form.rental_price) || 0, cover_url,
+        }).eq('id', editingBook.id)
         if (updateError) throw updateError
         setSuccess('Livre modifié avec succès.')
       } else {
-        // ── Mode ajout ──
         const { error: insertError } = await supabase.from('books').insert([{
-          title:            form.title,
-          author:           form.author,
-          category_id:      form.category_id || null,
-          language:         form.language,
-          summary:          form.summary,
-          total_copies:     parseInt(form.total_copies),
-          available_copies: parseInt(form.total_copies),
-          rental_price:     parseInt(form.rental_price) || 0,
-          cover_url,
+          title: form.title, author: form.author, category_id: form.category_id || null,
+          language: form.language, summary: form.summary, isbn: form.isbn || null,
+          total_copies: parseInt(form.total_copies), available_copies: parseInt(form.total_copies),
+          rental_price: parseInt(form.rental_price) || 0, cover_url,
         }])
         if (insertError) throw insertError
         setSuccess('Livre ajouté avec succès.')
       }
-
       resetForm()
       loadAll()
     } catch {
-      setError("Erreur lors de l'enregistrement. Réessaie.")
+      setError("Erreur lors de l'enregistrement.")
     }
     setSaving(false)
   }
 
-  // ── Supprimer (désactiver) un livre ──
   const handleDelete = async (bookId) => {
     setDeleting(bookId)
     await supabase.from('books').update({ is_active: false }).eq('id', bookId)
@@ -170,18 +143,42 @@ function BooksPage() {
     loadAll()
   }
 
-  const handleField = (e) =>
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  const handleField = (e) => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
 
   return (
     <AdminLayout>
+
+      {/* ── Modal QR Code ── */}
+      {qrBook && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setQrBook(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-xs w-full text-center" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-slate-900 mb-1 text-sm">{qrBook.title}</h3>
+            <p className="text-slate-400 text-xs mb-4">Collez ce QR code sur le livre</p>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?data=${qrBook.id}&size=200x200&margin=10`}
+              alt="QR Code"
+              className="mx-auto rounded-xl border border-slate-100"
+            />
+            {qrBook.isbn && (
+              <p className="text-slate-400 text-xs mt-3">ISBN : {qrBook.isbn}</p>
+            )}
+            <p className="text-slate-300 text-xs mt-1 break-all">{qrBook.id}</p>
+            <button onClick={() => setQrBook(null)}
+              className="mt-4 w-full py-2 bg-slate-100 text-slate-700 text-sm rounded-xl hover:bg-slate-200">
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Livres</h1>
           <p className="text-slate-400 text-sm mt-1">{books.length} livre(s)</p>
         </div>
         <button
-          onClick={() => { showForm && editingBook ? resetForm() : showForm ? resetForm() : setShowForm(true); setError(''); setSuccess('') }}
+          onClick={() => { showForm ? resetForm() : setShowForm(true); setError(''); setSuccess('') }}
           className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
             showForm ? 'bg-slate-200 text-slate-700' : 'bg-green-700 text-white hover:bg-green-800 shadow-sm'
           }`}
@@ -196,21 +193,16 @@ function BooksPage() {
         </div>
       )}
 
-      {/* ── Formulaire Ajout / Édition ── */}
+      {/* ── Formulaire ── */}
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8">
           <h2 className="text-base font-semibold text-slate-800 mb-6">
             {editingBook ? `Modifier : ${editingBook.title}` : 'Nouveau livre'}
           </h2>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">
-              {error}
-            </div>
-          )}
+          {error && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">{error}</div>}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-
             {/* Couverture */}
             <div className="flex items-start gap-5">
               <div className="w-20 h-28 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 border border-slate-200">
@@ -222,9 +214,6 @@ function BooksPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Photo de couverture</label>
                 <input type="file" accept="image/*" onChange={handleCoverChange}
                   className="w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:border-0 file:rounded-lg file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
-                {editingBook?.cover_url && !coverFile && (
-                  <p className="text-xs text-slate-400 mt-1">Couverture actuelle conservée si aucun fichier choisi.</p>
-                )}
               </div>
             </div>
 
@@ -242,6 +231,16 @@ function BooksPage() {
                   placeholder="Nom de l'auteur"
                   className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
+            </div>
+
+            {/* ISBN */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                ISBN <span className="text-slate-400 font-normal">(code-barres au dos du livre — pour le scan)</span>
+              </label>
+              <input type="text" name="isbn" value={form.isbn} onChange={handleField}
+                placeholder="ex: 9782123456789"
+                className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
 
             {/* Catégorie + Langue */}
@@ -266,13 +265,12 @@ function BooksPage() {
                       className="flex-1 border border-green-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleCreateCategory())} />
                     <button type="button" onClick={handleCreateCategory} disabled={savingCat || !newCatName.trim()}
-                      className="px-4 py-2 bg-green-700 text-white text-sm font-medium hover:bg-green-800 disabled:opacity-50 transition-colors">
+                      className="px-4 py-2 bg-green-700 text-white text-sm font-medium hover:bg-green-800 disabled:opacity-50">
                       {savingCat ? '...' : 'Créer'}
                     </button>
                   </div>
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Langue</label>
                 <div className="flex gap-3">
@@ -280,9 +278,7 @@ function BooksPage() {
                     <button key={opt.value} type="button"
                       onClick={() => setForm(p => ({ ...p, language: opt.value }))}
                       className={`flex-1 py-2.5 text-sm font-medium border transition-colors ${
-                        form.language === opt.value
-                          ? 'border-green-700 bg-green-50 text-green-800'
-                          : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                        form.language === opt.value ? 'border-green-700 bg-green-50 text-green-800' : 'border-slate-200 text-slate-500'
                       }`}>
                       {opt.label}
                     </button>
@@ -305,11 +301,6 @@ function BooksPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Exemplaires *</label>
                 <input type="number" name="total_copies" required min="1" value={form.total_copies} onChange={handleField}
                   className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                {editingBook && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    Les exemplaires en cours d'emprunt ({editingBook.total_copies - editingBook.available_copies}) sont conservés.
-                  </p>
-                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Prix location (FCFA)</label>
@@ -320,10 +311,7 @@ function BooksPage() {
 
             <button type="submit" disabled={saving}
               className="w-full bg-green-700 text-white py-3 text-sm font-semibold hover:bg-green-800 active:scale-[.99] transition-all disabled:opacity-50">
-              {saving
-                ? 'Enregistrement...'
-                : editingBook ? 'Enregistrer les modifications' : 'Ajouter le livre'
-              }
+              {saving ? 'Enregistrement...' : editingBook ? 'Enregistrer les modifications' : 'Ajouter le livre'}
             </button>
           </form>
         </div>
@@ -333,9 +321,7 @@ function BooksPage() {
       {loading ? (
         <p className="text-slate-400 text-sm">Chargement...</p>
       ) : books.length === 0 ? (
-        <div className="text-center py-20 text-slate-400">
-          <p className="text-lg font-medium">Aucun livre pour l'instant</p>
-        </div>
+        <div className="text-center py-20 text-slate-400"><p className="text-lg font-medium">Aucun livre</p></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {books.map(book => (
@@ -345,25 +331,21 @@ function BooksPage() {
                 <div className="w-14 h-20 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
                   {book.cover_url
                     ? <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><span className="text-slate-300 text-xs">—</span></div>
-                  }
+                    : <div className="w-full h-full flex items-center justify-center"><span className="text-slate-300 text-xs">—</span></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-slate-900 text-sm truncate">{book.title}</h3>
                   <p className="text-slate-400 text-xs mt-0.5 truncate">{book.author}</p>
+                  {book.isbn && <p className="text-slate-300 text-xs mt-0.5">ISBN : {book.isbn}</p>}
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {book.categories?.name && (
-                      <span className="bg-green-50 text-green-700 text-xs px-2 py-0.5 rounded-full">
-                        {book.categories.name}
-                      </span>
+                      <span className="bg-green-50 text-green-700 text-xs px-2 py-0.5 rounded-full">{book.categories.name}</span>
                     )}
                     <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full">
                       {book.language === 'EN' ? 'Anglais' : 'Français'}
                     </span>
                   </div>
-                  <p className="text-slate-500 text-xs mt-1.5">
-                    {book.available_copies}/{book.total_copies} dispo.
-                  </p>
+                  <p className="text-slate-500 text-xs mt-1.5">{book.available_copies}/{book.total_copies} dispo.</p>
                 </div>
               </div>
 
@@ -376,9 +358,7 @@ function BooksPage() {
                       className="px-3 py-1 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">
                       Annuler
                     </button>
-                    <button
-                      onClick={() => handleDelete(book.id)}
-                      disabled={deleting === book.id}
+                    <button onClick={() => handleDelete(book.id)} disabled={deleting === book.id}
                       className="px-3 py-1 text-xs text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-50">
                       {deleting === book.id ? '...' : 'Supprimer'}
                     </button>
@@ -386,6 +366,12 @@ function BooksPage() {
                 </div>
               ) : (
                 <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2 justify-end">
+                  <button onClick={() => setQrBook(book)}
+                    className="flex items-center gap-1 px-3 py-1 text-xs text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                    title="Afficher le QR code">
+                    <QrCode className="w-3 h-3" />
+                    QR
+                  </button>
                   <button onClick={() => handleEdit(book)}
                     className="flex items-center gap-1 px-3 py-1 text-xs text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                     <Pencil className="w-3 h-3" />
