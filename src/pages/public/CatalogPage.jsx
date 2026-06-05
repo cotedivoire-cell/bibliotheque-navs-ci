@@ -6,7 +6,6 @@ import BookCard from '../../components/BookCard'
 
 const ALL = 'Tous'
 
-// ── Skeleton de chargement ─────────────────────────────────────
 function SkeletonCard() {
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 animate-pulse">
@@ -20,7 +19,6 @@ function SkeletonCard() {
   )
 }
 
-// ── Page catalogue ─────────────────────────────────────────────
 function CatalogPage() {
   const navigate  = useNavigate()
   const [books,    setBooks]    = useState([])
@@ -29,11 +27,14 @@ function CatalogPage() {
   const [category, setCategory] = useState(ALL)
   const [session,  setSession]  = useState(null)
 
-  // Chargement des livres et session
   useEffect(() => {
     const load = async () => {
       const [{ data: books }, { data: { session } }] = await Promise.all([
-        supabase.from('books').select('*').eq('is_active', true).order('title'),
+        supabase
+          .from('books')
+          .select('*, categories(id, name)')
+          .eq('is_active', true)
+          .order('title'),
         supabase.auth.getSession(),
       ])
       setBooks(books || [])
@@ -43,21 +44,20 @@ function CatalogPage() {
     load()
   }, [])
 
-  // Catégories uniques extraites des livres
   const categories = useMemo(() => {
-    const cats = [...new Set(books.map(b => b.category).filter(Boolean))].sort()
+    const cats = [...new Set(
+      books.map(b => b.categories?.name).filter(Boolean)
+    )].sort()
     return [ALL, ...cats]
   }, [books])
 
-  // Filtrage en temps réel
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return books.filter(book => {
-      const matchSearch =
-        !q ||
+      const matchSearch = !q ||
         book.title?.toLowerCase().includes(q) ||
         book.author?.toLowerCase().includes(q)
-      const matchCat = category === ALL || book.category === category
+      const matchCat = category === ALL || book.categories?.name === category
       return matchSearch && matchCat
     })
   }, [books, search, category])
@@ -66,8 +66,6 @@ function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
-      {/* ── En-tête ── */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -83,12 +81,10 @@ function CatalogPage() {
               </p>
             </div>
           </div>
-
-          {/* Bouton connexion / espace membre */}
           <button
             onClick={() => navigate('/login')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-                       border border-gray-200 text-xs font-medium text-gray-600
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border
+                       border-gray-200 text-xs font-medium text-gray-600
                        hover:bg-gray-50 transition-colors"
           >
             <User className="w-3.5 h-3.5" />
@@ -98,53 +94,38 @@ function CatalogPage() {
       </header>
 
       <div className="max-w-2xl mx-auto px-4">
-
-        {/* ── Barre de recherche ── */}
         <div className="pt-5 pb-3">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Titre, auteur..."
               className="w-full bg-white border border-gray-200 rounded-2xl
-                         pl-11 pr-10 py-3.5 text-sm text-gray-900
-                         placeholder:text-gray-400
+                         pl-11 pr-10 py-3.5 text-sm placeholder:text-gray-400
                          focus:outline-none focus:ring-2 focus:ring-green-500
-                         focus:border-transparent shadow-sm"
-            />
+                         focus:border-transparent shadow-sm" />
             {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2
-                           text-gray-400 hover:text-gray-600 transition-colors"
-              >
+              <button onClick={() => setSearch('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
 
-        {/* ── Filtres par catégorie ── */}
         <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
           {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
+            <button key={cat} onClick={() => setCategory(cat)}
               className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold
                           transition-all duration-150 ${
                 category === cat
                   ? 'bg-green-700 text-white shadow-sm'
                   : 'bg-white border border-gray-200 text-gray-600 hover:border-green-300'
-              }`}
-            >
+              }`}>
               {cat}
             </button>
           ))}
         </div>
 
-        {/* ── Compteur de résultats ── */}
         {!loading && (
           <p className="text-xs text-gray-400 mb-4">
             {filtered.length} livre(s) —{' '}
@@ -152,7 +133,6 @@ function CatalogPage() {
           </p>
         )}
 
-        {/* ── Grille des livres ── */}
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-10">
             {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
@@ -164,13 +144,11 @@ function CatalogPage() {
             </div>
             <p className="font-semibold text-gray-700">Aucun livre trouvé</p>
             <p className="text-sm text-gray-400 mt-1">
-              {search ? 'Essayez une autre recherche' : 'La bibliothèque est vide pour l\'instant'}
+              {search ? 'Essayez une autre recherche' : "La bibliothèque est vide pour l'instant"}
             </p>
             {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="mt-4 text-green-700 text-sm font-medium"
-              >
+              <button onClick={() => setSearch('')}
+                className="mt-4 text-green-700 text-sm font-medium">
                 Effacer la recherche
               </button>
             )}
@@ -182,7 +160,6 @@ function CatalogPage() {
             ))}
           </div>
         )}
-
       </div>
     </div>
   )
