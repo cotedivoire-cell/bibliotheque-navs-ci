@@ -8,9 +8,9 @@ function BookCard({ book, onClick }) {
 
   return (
     <button onClick={() => onClick(book)} className="group text-left w-full focus:outline-none">
-      <div className={`bg-white border border-gray-100 overflow-hidden transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg ${!available ? 'opacity-60' : ''}`}>
+      <div className="bg-white border border-gray-100 overflow-hidden transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg">
 
-        {/* ── Couverture — aspectRatio + image absolue, débordement impossible ── */}
+        {/* ── Couverture ── */}
         <div className="relative overflow-hidden" style={{ aspectRatio: '2 / 3' }}>
 
           {hasCover ? (
@@ -18,7 +18,7 @@ function BookCard({ book, onClick }) {
               src={book.cover_url}
               alt={book.title}
               onError={() => setImgError(true)}
-              className="absolute inset-0 w-full h-full shadow-[4px_4px_10px_rgba(0,0,0,0.12)] border border-gray-100/50"
+              className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${!available ? 'opacity-50' : ''}`}
               style={{
                 objectFit:      'cover',
                 objectPosition: 'center top',
@@ -27,30 +27,19 @@ function BookCard({ book, onClick }) {
               }}
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-green-950 via-green-800 to-emerald-900 flex flex-col items-center justify-center gap-2">
+            <div className={`absolute inset-0 bg-gradient-to-br from-green-950 via-green-800 to-emerald-900 flex flex-col items-center justify-center gap-2 transition-opacity ${!available ? 'opacity-50' : ''}`}>
               <span className="text-white/90 text-3xl font-bold tracking-tight">{initials}</span>
               <div className="w-8 h-px bg-white/20" />
               <span className="text-white/30 text-[9px] tracking-widest uppercase">Navigateurs CI</span>
             </div>
           )}
 
-          {/* ── Badge disponibilité translucide — directive 4 ── */}
-          {available ? (
-            <div className="absolute top-2 right-2 bg-green-50/70 backdrop-blur-sm px-2 py-0.5 rounded-md">
-              <span className="text-green-700 text-[10px] font-bold tracking-wider uppercase">
-                Disponible
-              </span>
-            </div>
-          ) : (
-            <>
-              <div className="absolute inset-0 bg-white/35" />
-              <div className="absolute top-2 right-2 bg-gray-100/70 backdrop-blur-sm px-2 py-0.5 rounded-md">
-                <span className="text-gray-500 text-[10px] font-bold tracking-wider uppercase">
-                  Indisponible
-                </span>
-              </div>
-            </>
-          )}
+          {/* ── Voyant LED minimaliste — aucun texte ── */}
+          <div className={`absolute top-2 right-2 h-2.5 w-2.5 rounded-full ${
+            available
+              ? 'bg-green-500 shadow-[0_0_8px_#22c55e]'
+              : 'bg-gray-400'
+          }`} />
         </div>
 
         {/* ── Zone texte fixe ── */}

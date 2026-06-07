@@ -49,7 +49,7 @@ function CatalogPage() {
         {/* Ligne 1 : Logo + Titre + Mon espace */}
         <div className="flex items-center justify-between px-4 py-3">
 
-          {/* Logo — icône vectorielle Lucide */}
+          {/* Logo Lucide */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-green-700 rounded-xl flex items-center justify-center flex-shrink-0">
               <BookOpen className="w-4 h-4 text-white" strokeWidth={1.8} />
@@ -60,28 +60,28 @@ function CatalogPage() {
             </div>
           </div>
 
-          {/* Bouton Mon espace — discret, élégant, pas d'emoji */}
+          {/* Bouton Mon espace — discret, icône Lucide très légère */}
           <button
             onClick={() => navigate(user ? '/profile' : '/login')}
-            className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-1.5 bg-white hover:border-green-400 hover:text-green-700 transition-colors group"
+            className="flex items-center gap-1.5 border border-gray-100 rounded-xl px-3 py-1.5 bg-white hover:border-green-300 hover:text-green-700 transition-all group"
           >
-            <User className="w-3.5 h-3.5 text-gray-400 group-hover:text-green-600 transition-colors" strokeWidth={1.5} />
+            <User className="w-3.5 h-3.5 text-gray-300 group-hover:text-green-600 transition-colors" strokeWidth={1.5} />
             <span className="text-xs font-medium text-gray-500 tracking-wide group-hover:text-green-700 transition-colors">
               {user ? 'Mon espace' : 'Connexion'}
             </span>
           </button>
         </div>
 
-        {/* Ligne 2 : Barre de recherche — rounded-2xl plus douce */}
+        {/* Ligne 2 : Barre de recherche — rounded-3xl très douce */}
         <div className="px-4 pb-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.5} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.5} />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Titre, auteur..."
-              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 bg-gray-50 transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-3xl focus:outline-none focus:border-green-300 focus:ring-2 focus:ring-green-50 bg-gray-50 transition-all"
             />
           </div>
         </div>
@@ -91,7 +91,9 @@ function CatalogPage() {
           <button
             onClick={() => setActiveCat(null)}
             className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
-              !activecat ? 'bg-green-700 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+              !activecat
+                ? 'bg-green-700 text-white shadow-sm'
+                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
             }`}
           >
             Tous
@@ -101,7 +103,9 @@ function CatalogPage() {
               key={cat.id}
               onClick={() => setActiveCat(cat.id === activecat ? null : cat.id)}
               className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
-                activecat === cat.id ? 'bg-green-700 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                activecat === cat.id
+                  ? 'bg-green-700 text-white shadow-sm'
+                  : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
               }`}
             >
               {cat.name}
@@ -113,7 +117,7 @@ function CatalogPage() {
       {/* ── Contenu ── */}
       <div className="px-4 pt-4 pb-8">
 
-        {/* Compteur élégant */}
+        {/* Compteur */}
         {!loading && (
           <p className="text-sm mb-4">
             <span className="text-gray-400 font-light">Découvrez notre sélection — </span>
@@ -123,7 +127,7 @@ function CatalogPage() {
           </p>
         )}
 
-        {/* Grille livres */}
+        {/* Grille */}
         {loading ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -141,10 +145,7 @@ function CatalogPage() {
             <BookOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" strokeWidth={1} />
             <p className="text-gray-400 text-sm font-light">Aucun ouvrage trouvé</p>
             {(search || activecat) && (
-              <button
-                onClick={() => { setSearch(''); setActiveCat(null) }}
-                className="mt-3 text-green-700 text-sm hover:underline"
-              >
+              <button onClick={() => { setSearch(''); setActiveCat(null) }} className="mt-3 text-green-700 text-sm hover:underline">
                 Effacer les filtres
               </button>
             )}
