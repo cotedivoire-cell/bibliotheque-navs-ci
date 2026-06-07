@@ -352,21 +352,22 @@ function BookDetailModal({ book, onClose }) {
                 </div>
 
               ) : !showReserveForm ? (
-                <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 font-light">Date de la demande</span>
-                    <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
+                <>
+                  <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-light">Date de la demande</span>
+                      <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-light">Contribution</span>
+                      <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 font-light">Contribution</span>
-                    <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
-                  </div>
-                </div>
-                {/* Bouton principal */}
-                <button onClick={() => setShowReserveForm(true)}
-                  className="w-full py-3.5 bg-green-700 text-white rounded-2xl text-sm font-semibold tracking-wide hover:bg-green-800 active:scale-[.98] transition-all shadow-sm">
-                  Réserver ce livre (48h)
-                </button>
+                  <button onClick={() => setShowReserveForm(true)}
+                    className="w-full py-3.5 bg-green-700 text-white rounded-2xl text-sm font-semibold tracking-wide hover:bg-green-800 active:scale-[.98] transition-all shadow-sm">
+                    Réserver ce livre (48h)
+                  </button>
+                </>
 
               ) : (
                 /* Formulaire de choix de retrait */
