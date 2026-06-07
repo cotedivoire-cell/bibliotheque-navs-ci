@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Calendar, BookOpen } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
@@ -147,7 +148,7 @@ function RegisterPage() {
                     ? 'border-green-700 bg-green-50'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}>
-                <span className="text-2xl">📅</span>
+                <Calendar className={`w-5 h-5 ${choice === 'annual' ? 'text-green-700' : 'text-gray-400'}`} strokeWidth={1.5} />
                 <span className={`text-xs font-bold ${choice === 'annual' ? 'text-green-700' : 'text-gray-600'}`}>
                   Abonnement annuel
                 </span>
@@ -166,7 +167,7 @@ function RegisterPage() {
                     ? 'border-amber-500 bg-amber-50'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}>
-                <span className="text-2xl">📖</span>
+                <BookOpen className={`w-5 h-5 ${choice === 'unit' ? 'text-green-700' : 'text-gray-400'}`} strokeWidth={1.5} />
                 <span className={`text-xs font-bold ${choice === 'unit' ? 'text-amber-700' : 'text-gray-600'}`}>
                   À l'unité
                 </span>
@@ -183,8 +184,8 @@ function RegisterPage() {
             <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
               <p className="text-xs text-amber-700 leading-relaxed">
                 {choice === 'annual'
-                  ? `Votre compte sera activé après réception de ${fees.annual.toLocaleString('fr-FR')} FCFA au bureau des Navigateurs.`
-                  : `Votre compte sera activé après votre première visite au bureau. Vous paierez ${fees.unit.toLocaleString('fr-FR')} FCFA par livre emprunté.`
+                  ? 'Pour activer vos accès illimités, contactez simplement le bureau des Navigateurs afin de finaliser votre adhésion (sur place, Wave, Orange Money...).'
+                  : 'Vous pouvez payer par Wave ou Mobile Money dès maintenant, ou directement au bureau des Navigateurs lors du retrait de votre livre.'
                 }
               </p>
             </div>
