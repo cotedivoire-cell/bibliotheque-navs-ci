@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle, Clock, Pencil, Trash2, X, Check, ScanLine, RotateCcw } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { AlertTriangle, CheckCircle, Clock, Pencil, Trash2, X, Check, ScanLine, RotateCcw, Loader } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
 import BookScanner from '../../components/BookScanner'
@@ -30,11 +30,13 @@ function BorrowingsPage() {
   const [newDueDate,    setNewDueDate]    = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting,      setDeleting]      = useState(null)
+  const [scanMode,      setScanMode]      = useState(null)
+  const [scanMsg,       setScanMsg]       = useState('')
+  const [scanSuccess,   setScanSuccess]   = useState(false)
+  const [scanLoading,   setScanLoading]   = useState(false)
 
-  // ── États scan ──
-  const [scanMode,    setScanMode]    = useState(null) // null | 'borrow' | 'return'
-  const [scanMsg,     setScanMsg]     = useState('')   // message résultat scan
-  const [scanSuccess, setScanSuccess] = useState(false)
+  // ── Ref pour éviter le problème de closure stale ──────────
+  const scanModeRef = useRef(null)
 
   useEffect(() => { loadAll() }, [])
 
@@ -58,76 +60,92 @@ function BorrowingsPage() {
     setLoading(false)
   }
 
-  // ── Recherche livre par ISBN ou UUID ──────────────────────
+  // ── Démarrer le scan ──────────────────────────────────────
+  const startScan = (mode) => {
+    scanModeRef.current = mode   // stocker dans le ref (pas de problème de closure)
+    setScanMode(mode)
+    setScanMsg('')
+    setScanSuccess(false)
+  }
+
+  // ── Recherche livre par UUID (QR) ou ISBN (code-barres) ───
   const findBook = async (code) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-    let query = supabase.from('books').select('*, categories(name)')
-
-    if (uuidRegex.test(code)) {
-      query = query.eq('id', code)
-    } else {
-      query = query.eq('isbn', code)
-    }
-
-    const { data } = await query.eq('is_active', true).maybeSingle()
+    const { data } = await supabase
+      .from('books')
+      .select('*, categories(name)')
+      .eq(uuidRegex.test(code) ? 'id' : 'isbn', code)
+      .eq('is_active', true)
+      .maybeSingle()
     return data
   }
 
-  // ── Résultat du scan ──────────────────────────────────────
+  // ── Traitement du résultat scan ───────────────────────────
   const handleScanResult = async (code) => {
-    setScanMode(null) // ferme scanner
+    const mode = scanModeRef.current  // lire depuis le ref (valeur stable)
+    setScanMode(null)
+    scanModeRef.current = null
+    setScanLoading(true)
     setScanMsg('')
     setScanSuccess(false)
 
-    const book = await findBook(code)
+    try {
+      const book = await findBook(code)
 
-    if (!book) {
-      setScanMsg(`Aucun livre trouvé pour le code "${code.slice(0, 20)}...". Vérifiez que l'ISBN est renseigné dans la fiche du livre.`)
-      return
-    }
-
-    if (scanMode === 'borrow') {
-      // ── Mode emprunt ──
-      if (book.available_copies <= 0) {
-        setScanMsg(`"${book.title}" n'est pas disponible en ce moment.`)
-        return
-      }
-      setForm(p => ({ ...p, book_id: book.id }))
-      setShowForm(true)
-      setScanSuccess(true)
-      setScanMsg(`Livre détecté : "${book.title}" — complétez le formulaire ci-dessous.`)
-    } else if (scanMode === 'return') {
-      // ── Mode retour rapide ──
-      const { data: activeBorrow } = await supabase
-        .from('borrowings')
-        .select('*, profiles(full_name)')
-        .eq('book_id', book.id)
-        .in('status', ['en_cours', 'en_retard'])
-        .order('borrowed_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-
-      if (!activeBorrow) {
-        setScanMsg(`"${book.title}" n'a aucun emprunt actif à valider.`)
+      if (!book) {
+        setScanMsg(`Aucun livre trouvé pour ce code. Assurez-vous que l'ISBN est renseigné dans la fiche du livre.`)
+        setScanLoading(false)
         return
       }
 
-      // Valider le retour
-      await supabase.from('borrowings')
-        .update({ status: 'retourné', returned_at: TODAY })
-        .eq('id', activeBorrow.id)
+      if (mode === 'borrow') {
+        // ── Pré-remplir le formulaire ──
+        if (book.available_copies <= 0) {
+          setScanMsg(`"${book.title}" n'est pas disponible en ce moment.`)
+          setScanLoading(false)
+          return
+        }
+        setForm(p => ({ ...p, book_id: book.id }))
+        setShowForm(true)
+        setScanSuccess(true)
+        setScanMsg(`Livre détecté : "${book.title}" — complétez le formulaire ci-dessous.`)
 
-      const { data: bookData } = await supabase
-        .from('books').select('available_copies').eq('id', book.id).single()
-      await supabase.from('books')
-        .update({ available_copies: bookData.available_copies + 1 })
-        .eq('id', book.id)
+      } else if (mode === 'return') {
+        // ── Retour rapide ──
+        const { data: activeBorrow } = await supabase
+          .from('borrowings')
+          .select('*, profiles(full_name)')
+          .eq('book_id', book.id)
+          .in('status', ['en_cours', 'en_retard'])
+          .order('borrowed_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
 
-      setScanSuccess(true)
-      setScanMsg(`Retour validé — "${book.title}" rendu par ${activeBorrow.profiles?.full_name}.`)
-      loadAll()
+        if (!activeBorrow) {
+          setScanMsg(`"${book.title}" n'a aucun emprunt actif à valider.`)
+          setScanLoading(false)
+          return
+        }
+
+        await supabase.from('borrowings')
+          .update({ status: 'retourné', returned_at: TODAY })
+          .eq('id', activeBorrow.id)
+
+        const { data: bookData } = await supabase
+          .from('books').select('available_copies').eq('id', book.id).single()
+        await supabase.from('books')
+          .update({ available_copies: bookData.available_copies + 1 })
+          .eq('id', book.id)
+
+        setScanSuccess(true)
+        setScanMsg(`Retour validé — "${book.title}" rendu par ${activeBorrow.profiles?.full_name}.`)
+        loadAll()
+      }
+    } catch {
+      setScanMsg('Erreur lors de la recherche. Réessayez.')
     }
+
+    setScanLoading(false)
   }
 
   const selectedMember = members.find(m => m.id === form.member_id)
@@ -161,7 +179,6 @@ function BorrowingsPage() {
     setSaving(false)
   }
 
-  // ── Retour manuel ──
   const handleReturn = async (borrowing) => {
     await supabase.from('borrowings').update({ status: 'retourné', returned_at: TODAY }).eq('id', borrowing.id)
     const { data: book } = await supabase.from('books').select('available_copies').eq('id', borrowing.book_id).single()
@@ -169,7 +186,6 @@ function BorrowingsPage() {
     loadAll()
   }
 
-  // ── Modifier date limite ──
   const handleSaveDate = async (id) => {
     if (!newDueDate) return
     await supabase.from('borrowings')
@@ -180,7 +196,6 @@ function BorrowingsPage() {
     loadAll()
   }
 
-  // ── Supprimer ──
   const handleDelete = async (borrowing) => {
     setDeleting(borrowing.id)
     if (borrowing.status !== 'retourné') {
@@ -203,7 +218,7 @@ function BorrowingsPage() {
         <BookScanner
           title={scanMode === 'borrow' ? 'Scanner pour emprunt' : 'Scanner pour retour rapide'}
           onResult={handleScanResult}
-          onClose={() => setScanMode(null)}
+          onClose={() => { setScanMode(null); scanModeRef.current = null }}
         />
       )}
 
@@ -214,40 +229,35 @@ function BorrowingsPage() {
           <p className="text-slate-400 text-sm mt-1">{activeCount} en cours</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {/* Scanner retour rapide */}
-          <button
-            onClick={() => { setScanMode('return'); setScanMsg(''); setScanSuccess(false) }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
-                       border border-amber-200 bg-amber-50 text-amber-700
-                       hover:bg-amber-100 transition-colors"
-          >
+          <button onClick={() => startScan('return')}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
             <RotateCcw className="w-4 h-4" />
             Retour rapide
           </button>
-          {/* Scanner emprunt */}
-          <button
-            onClick={() => { setScanMode('borrow'); setScanMsg(''); setScanSuccess(false) }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
-                       border border-blue-200 bg-blue-50 text-blue-700
-                       hover:bg-blue-100 transition-colors"
-          >
+          <button onClick={() => startScan('borrow')}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
             <ScanLine className="w-4 h-4" />
             Scanner un livre
           </button>
-          {/* Emprunt manuel */}
-          <button
-            onClick={() => { setShowForm(v => !v); setError(''); setScanMsg('') }}
+          <button onClick={() => { setShowForm(v => !v); setError(''); setScanMsg('') }}
             className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               showForm ? 'bg-slate-200 text-slate-700' : 'bg-green-700 text-white hover:bg-green-800 shadow-sm'
-            }`}
-          >
+            }`}>
             {showForm ? 'Annuler' : '+ Créer manuellement'}
           </button>
         </div>
       </div>
 
+      {/* ── Indicateur de chargement post-scan ── */}
+      {scanLoading && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl mb-5 text-blue-700 text-sm">
+          <Loader className="w-4 h-4 animate-spin flex-shrink-0" />
+          Recherche du livre en cours...
+        </div>
+      )}
+
       {/* ── Message résultat scan ── */}
-      {scanMsg && (
+      {scanMsg && !scanLoading && (
         <div className={`px-4 py-3 rounded-xl mb-5 text-sm flex items-start gap-3 ${
           scanSuccess
             ? 'bg-green-50 border border-green-200 text-green-700'
@@ -264,18 +274,12 @@ function BorrowingsPage() {
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8">
           <h2 className="text-base font-semibold text-slate-800 mb-6">
-            {form.book_id ? 'Finaliser l\'emprunt (livre pré-sélectionné)' : 'Nouvel emprunt'}
+            {form.book_id ? "Finaliser l'emprunt (livre pré-sélectionné)" : 'Nouvel emprunt'}
           </h2>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">
-              {error}
-            </div>
-          )}
+          {error && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">{error}</div>}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-
-            {/* Membre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Membre *</label>
               <select required value={form.member_id}
@@ -294,13 +298,12 @@ function BorrowingsPage() {
               )}
             </div>
 
-            {/* Livre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Livre *</label>
               <select required value={form.book_id}
                 onChange={e => setForm(p => ({ ...p, book_id: e.target.value }))}
                 className={`w-full border px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                  form.book_id ? 'border-green-500 bg-green-50' : 'border-slate-200'
+                  form.book_id ? 'border-green-400' : 'border-slate-200'
                 }`}>
                 <option value="">Sélectionner un livre disponible</option>
                 {books.map(b => <option key={b.id} value={b.id}>{b.title} — {b.available_copies} dispo.</option>)}
@@ -310,7 +313,6 @@ function BorrowingsPage() {
               )}
             </div>
 
-            {/* Type emprunt */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Type d'emprunt *</label>
               <div className="flex gap-3">
@@ -439,7 +441,7 @@ function BorrowingsPage() {
                 {confirmDelete === b.id && (
                   <div className="mt-3 pt-3 border-t border-red-100 flex items-center justify-between">
                     <p className="text-xs text-red-600 font-medium">
-                      Supprimer cet emprunt ?{b.status !== 'retourné' && ' Le stock sera restauré.'}
+                      Supprimer ?{b.status !== 'retourné' && ' Le stock sera restauré.'}
                     </p>
                     <div className="flex gap-2">
                       <button onClick={() => setConfirmDelete(null)}
