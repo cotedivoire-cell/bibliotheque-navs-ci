@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import { X, BookOpen, MapPin, Truck, Clock } from 'lucide-react'
+import { X, BookOpen, MapPin, Truck, Clock, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const LANG = { FR: 'Français', EN: 'Anglais' }
-
 const PICKUP_HOURS = "📍 Point de retrait ouvert du mardi au vendredi de 8h30 à 17h00. Assurez-vous que votre coursier se présente dans ces créneaux."
 
 function StarDisplay({ rating }) {
@@ -44,6 +43,7 @@ function BookDetailModal({ book, onClose }) {
   const [reserveResult,    setReserveResult]    = useState(null)
   const [reserveError,     setReserveError]     = useState('')
   const [hasReservation,   setHasReservation]   = useState(false)
+  const [realStock,        setRealStock]        = useState(null) // stock temps réel
 
   useEffect(() => {
     if (book) { document.body.style.overflow = 'hidden'; setTimeout(() => setVisible(true), 10); loadData() }
@@ -55,9 +55,11 @@ function BookDetailModal({ book, onClose }) {
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
 
-    const [reviewsRes, recoRes] = await Promise.all([
+    const [reviewsRes, recoRes, activeRes, reserveRes] = await Promise.all([
       supabase.from('reviews').select('*, profiles(full_name)').eq('book_id', book.id).order('created_at', { ascending: false }),
       book.category_id ? supabase.from('books').select('id, title, author, cover_url, categories(name)').eq('category_id', book.category_id).eq('is_active', true).neq('id', book.id).limit(3) : { data: [] },
+      supabase.from('borrowings').select('id', { count: 'exact', head: true }).eq('book_id', book.id).in('status', ['en_cours', 'en_retard']),
+      supabase.from('reservations').select('id', { count: 'exact', head: true }).eq('book_id', book.id).eq('status', 'pending'),
     ])
 
     const r = reviewsRes.data || []
@@ -65,18 +67,76 @@ function BookDetailModal({ book, onClose }) {
     setAvgRating(r.length > 0 ? r.reduce((s, rv) => s + rv.rating, 0) / r.length : 0)
     setRecommendations(recoRes.data || [])
 
+    // Stock réel = total - actifs - réservés
+    const taken = (activeRes.count || 0) + (reserveRes.count || 0)
+    setRealStock(Math.max(0, (book.total_copies || book.available_copies || 0) - taken))
+
     if (user) {
-      const [profileRes, hasReturnedRes, hasReviewedRes, hasReservationRes] = await Promise.all([
+      const [profileRes, hasReturnedRes, hasReviewedRes, hasReservationRes, memberActiveBorrowRes] = await Promise.all([
         supabase.from('profiles').select('is_blocked, account_type, profile_status').eq('id', user.id).single(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'retourné').limit(1).maybeSingle(),
         supabase.from('reviews').select('id').eq('member_id', user.id).eq('book_id', book.id).maybeSingle(),
         supabase.from('reservations').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'pending').maybeSingle(),
+        supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).in('status', ['en_cours', 'en_retard']).maybeSingle(),
       ])
       setUserProfile(profileRes.data)
       setCanReview(!!hasReturnedRes.data)
       setHasReviewed(!!hasReviewedRes.data)
-      setHasReservation(!!hasReservationRes.data)
+      setHasReservation(!!hasReservationRes.data || !!memberActiveBorrowRes.data)
     }
+  }
+
+  // ── Vérification stock temps réel avant réservation ────────
+  const handleReserve = async () => {
+    setSavingReserve(true)  // Disable immédiatement — anti-spam
+    setReserveError('')
+
+    if (userProfile?.is_blocked) {
+      setReserveError('Votre compte est temporairement bloqué. Contactez un gestionnaire.')
+      setSavingReserve(false); return
+    }
+
+    // Double-check stock en temps réel
+    const [bookRes, activeRes, reserveRes, memberBorrowRes, memberReserveRes] = await Promise.all([
+      supabase.from('books').select('total_copies').eq('id', book.id).single(),
+      supabase.from('borrowings').select('id', { count: 'exact', head: true }).eq('book_id', book.id).in('status', ['en_cours', 'en_retard']),
+      supabase.from('reservations').select('id', { count: 'exact', head: true }).eq('book_id', book.id).eq('status', 'pending'),
+      supabase.from('borrowings').select('id').eq('book_id', book.id).eq('member_id', userId).in('status', ['en_cours', 'en_retard']).maybeSingle(),
+      supabase.from('reservations').select('id').eq('book_id', book.id).eq('member_id', userId).eq('status', 'pending').maybeSingle(),
+    ])
+
+    if (memberBorrowRes.data || memberReserveRes.data) {
+      setReserveError('Vous avez déjà un emprunt ou une réservation active pour ce livre.')
+      setSavingReserve(false); return
+    }
+
+    const total = bookRes.data?.total_copies || 0
+    const taken = (activeRes.count || 0) + (reserveRes.count || 0)
+    if (total - taken <= 0) {
+      setReserveError('Stock épuisé — tous les exemplaires sont empruntés ou réservés.')
+      setRealStock(0)
+      setSavingReserve(false); return
+    }
+
+    const code      = pickupType === 'courier' ? generatePickupCode() : null
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+
+    const { error } = await supabase.from('reservations').insert([{
+      book_id: book.id, member_id: userId,
+      pickup_type: pickupType, pickup_code: code, expires_at: expiresAt,
+    }])
+
+    if (error) {
+      setReserveError(error.code === '23505' ? 'Vous avez déjà une réservation active.' : 'Erreur. Réessayez.')
+    } else {
+      // Décrémenter stock
+      await supabase.from('books').update({ available_copies: Math.max(0, (book.available_copies || 1) - 1) }).eq('id', book.id)
+      setReserveResult({ code, expiresAt })
+      setHasReservation(true)
+      setShowReserveForm(false)
+      setRealStock(prev => Math.max(0, (prev || 1) - 1))
+    }
+    setSavingReserve(false)
   }
 
   const handleSubmitReview = async (e) => {
@@ -84,35 +144,17 @@ function BookDetailModal({ book, onClose }) {
     if (reviewForm.rating === 0) { setReviewError('Veuillez choisir une note.'); return }
     setSavingReview(true); setReviewError('')
     const { error } = await supabase.from('reviews').insert([{ book_id: book.id, member_id: userId, rating: reviewForm.rating, comment: reviewForm.comment.trim() || null }])
-    if (error) setReviewError(error.code === '23505' ? 'Vous avez déjà laissé un avis.' : "Erreur lors de l'envoi.")
+    if (error) setReviewError(error.code === '23505' ? 'Vous avez déjà laissé un avis.' : "Erreur.")
     else { setShowForm(false); setHasReviewed(true); setReviewForm({ rating: 0, comment: '' }); loadData() }
     setSavingReview(false)
   }
 
-  const handleReserve = async () => {
-    if (!userId) return
-    setSavingReserve(true); setReserveError('')
-    if (userProfile?.is_blocked) { setReserveError('Votre compte est temporairement bloqué. Contactez un gestionnaire.'); setSavingReserve(false); return }
-    const code      = pickupType === 'courier' ? generatePickupCode() : null
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-    const { error } = await supabase.from('reservations').insert([{ book_id: book.id, member_id: userId, pickup_type: pickupType, pickup_code: code, expires_at: expiresAt }])
-    if (error) {
-      setReserveError(error.code === '23505' ? 'Vous avez déjà une réservation active pour ce livre.' : 'Erreur. Réessayez.')
-    } else {
-      setReserveResult({ code, expiresAt })
-      setHasReservation(true)
-      setShowReserveForm(false)
-      await supabase.from('books').update({ available_copies: (book.available_copies || 1) - 1 }).eq('id', book.id)
-    }
-    setSavingReserve(false)
-  }
-
   if (!book) return null
   const handleClose = () => { setVisible(false); setTimeout(onClose, 300) }
-  const available  = book.available_copies > 0
+  const initials   = book.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
   const isPending  = userProfile?.profile_status === 'en_attente'
   const isBlocked  = userProfile?.is_blocked
-  const initials   = book.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
+  const stockOk    = realStock === null ? book.available_copies > 0 : realStock > 0
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -133,7 +175,12 @@ function BookDetailModal({ book, onClose }) {
             <h2 className="text-xl font-bold text-gray-900 leading-snug">{book.title}</h2>
             <p className="text-gray-500 mt-1 text-sm">{book.author}</p>
             <div className="flex flex-wrap gap-2 mt-3">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${available ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>{available ? `${book.available_copies} exemplaire(s) disponible(s)` : 'Indisponible'}</span>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${stockOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                {realStock !== null
+                  ? stockOk ? `${realStock} exemplaire(s) disponible(s)` : 'Indisponible'
+                  : stockOk ? `${book.available_copies} exemplaire(s) disponible(s)` : 'Indisponible'
+                }
+              </span>
               {book.categories?.name && <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">{book.categories.name}</span>}
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{LANG[book.language] || 'Français'}</span>
             </div>
@@ -141,91 +188,90 @@ function BookDetailModal({ book, onClose }) {
           </div>
 
           {/* Résumé */}
-          {book.summary ? <div><h3 className="text-sm font-bold text-gray-900 mb-2">Résumé</h3><p className="text-gray-600 text-sm leading-relaxed">{book.summary}</p></div> : <p className="text-gray-300 text-sm italic">Aucun résumé disponible.</p>}
+          {book.summary ? <div><h3 className="text-sm font-bold text-gray-900 mb-2">Résumé</h3><p className="text-gray-600 text-sm leading-relaxed">{book.summary}</p></div> : null}
 
-          {/* ── Section réservation ── */}
+          {/* ── Réservation ── */}
           {userId && (
             <div>
-              {/* Confirmation réservation réussie */}
               {reserveResult ? (
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
                   <p className="text-green-800 font-semibold text-sm">Réservation confirmée !</p>
-                  <p className="text-green-700 text-xs">Expire le {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')} à {new Date(reserveResult.expiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                  <p className="text-green-700 text-xs">Expire le {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')}</p>
                   {reserveResult.code && (
-                    <div className="bg-white rounded-xl p-3 text-center border border-green-200">
-                      <p className="text-xs text-gray-500 mb-1">Code de retrait pour ton coursier</p>
-                      <p className="text-3xl font-bold text-green-700 tracking-widest">{reserveResult.code}</p>
-                    </div>
+                    <>
+                      <div className="bg-white rounded-xl p-3 text-center border border-green-200">
+                        <p className="text-xs text-gray-500 mb-1">Code de retrait pour ton coursier</p>
+                        <p className="text-3xl font-bold text-green-700 tracking-widest">{reserveResult.code}</p>
+                      </div>
+                      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
+                      </div>
+                    </>
                   )}
-                  {/* ── Horaires de retrait ── */}
-                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
-                  </div>
                 </div>
               ) : hasReservation ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-                  <p className="text-amber-800 text-sm font-medium">Vous avez déjà une réservation active.</p>
-                  <p className="text-amber-600 text-xs mt-1">Consultez votre espace membre pour le code de retrait.</p>
+                  <p className="text-amber-800 text-sm font-medium">Vous avez déjà un emprunt ou une réservation active pour ce livre.</p>
                 </div>
               ) : isPending ? (
-                /* ── Compte en attente d'activation ── */
                 <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
                   <p className="text-orange-800 text-sm font-semibold mb-1">Compte en attente d'activation</p>
-                  <p className="text-orange-700 text-xs leading-relaxed">
-                    Veuillez faire activer votre compte au bureau des Navigateurs pour réserver. Un gestionnaire validera votre inscription.
-                  </p>
+                  <p className="text-orange-700 text-xs leading-relaxed">Veuillez faire activer votre compte au bureau des Navigateurs pour réserver. Un gestionnaire validera votre inscription.</p>
                 </div>
               ) : isBlocked ? (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
                   <p className="text-red-700 text-sm font-medium">Compte bloqué — réservation impossible.</p>
-                  <p className="text-red-500 text-xs mt-1">Contactez un gestionnaire.</p>
                 </div>
-              ) : available ? (
-                /* ── Formulaire de réservation ── */
-                !showReserveForm ? (
-                  <button onClick={() => setShowReserveForm(true)} className="w-full py-3 bg-green-700 text-white rounded-2xl text-sm font-semibold hover:bg-green-800 transition-colors">
-                    Réserver ce livre (48h)
-                  </button>
-                ) : (
-                  <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
-                    <p className="text-sm font-semibold text-gray-900">Comment récupérer le livre ?</p>
-                    {reserveError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{reserveError}</p>}
-                    <div className="grid grid-cols-2 gap-3">
-                      <button type="button" onClick={() => setPickupType('self')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'self' ? 'border-green-700 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                        <MapPin className={`w-5 h-5 ${pickupType === 'self' ? 'text-green-700' : 'text-gray-400'}`} />
-                        <span className={`text-xs font-semibold ${pickupType === 'self' ? 'text-green-700' : 'text-gray-500'}`}>Je viens moi-même</span>
-                      </button>
-                      <button type="button" onClick={() => setPickupType('courier')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'courier' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}`}>
-                        <Truck className={`w-5 h-5 ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-400'}`} />
-                        <span className={`text-xs font-semibold ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-500'}`}>Coursier (Yango/Glovo)</span>
-                      </button>
+              ) : !stockOk ? (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                  <p className="text-red-700 text-sm">Stock épuisé — tous les exemplaires sont empruntés ou réservés.</p>
+                </div>
+              ) : !showReserveForm ? (
+                <button onClick={() => setShowReserveForm(true)} className="w-full py-3 bg-green-700 text-white rounded-2xl text-sm font-semibold hover:bg-green-800 transition-colors">
+                  Réserver ce livre (48h)
+                </button>
+              ) : (
+                <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
+                  <p className="text-sm font-semibold text-gray-900">Comment récupérer le livre ?</p>
+                  {reserveError && (
+                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+                      <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-600">{reserveError}</p>
                     </div>
-                    {pickupType === 'courier' && (
-                      <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
-                        Un code à 4 chiffres sera généré. Ton coursier le présentera au comptoir.
-                      </div>
-                    )}
-                    {/* Horaires toujours visibles dans le formulaire */}
-                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowReserveForm(false)} className="flex-1 py-2.5 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">Annuler</button>
-                      <button onClick={handleReserve} disabled={savingReserve} className="flex-1 py-2.5 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 font-semibold disabled:opacity-50">{savingReserve ? '...' : 'Confirmer la réservation'}</button>
-                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => setPickupType('self')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'self' ? 'border-green-700 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                      <MapPin className={`w-5 h-5 ${pickupType === 'self' ? 'text-green-700' : 'text-gray-400'}`} />
+                      <span className={`text-xs font-semibold ${pickupType === 'self' ? 'text-green-700' : 'text-gray-500'}`}>Je viens moi-même</span>
+                    </button>
+                    <button type="button" onClick={() => setPickupType('courier')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'courier' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                      <Truck className={`w-5 h-5 ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-400'}`} />
+                      <span className={`text-xs font-semibold ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-500'}`}>Coursier (Yango/Glovo)</span>
+                    </button>
                   </div>
-                )
-              ) : null}
+                  {pickupType === 'courier' && <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">Un code à 4 chiffres sera généré pour ton coursier.</div>}
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowReserveForm(false); setReserveError('') }} className="flex-1 py-2.5 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">Annuler</button>
+                    <button onClick={handleReserve} disabled={savingReserve}
+                      className="flex-1 py-2.5 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                      {savingReserve ? 'Vérification...' : 'Confirmer la réservation'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Pas connecté */}
           {!userId && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
               <p className="text-amber-800 text-sm font-semibold mb-1">Comment emprunter ce livre ?</p>
-              <p className="text-amber-700 text-xs leading-relaxed">Connectez-vous pour réserver en ligne, ou présentez-vous au comptoir de la bibliothèque.</p>
+              <p className="text-amber-700 text-xs leading-relaxed">Connectez-vous pour réserver en ligne, ou présentez-vous au comptoir.</p>
             </div>
           )}
 
@@ -259,7 +305,6 @@ function BookDetailModal({ book, onClose }) {
                 )}
               </div>
             )}
-            {userId && hasReviewed && <p className="text-xs text-green-600 mt-2 font-medium">Vous avez déjà laissé un avis pour ce livre.</p>}
           </div>
 
           {/* Recommandations */}

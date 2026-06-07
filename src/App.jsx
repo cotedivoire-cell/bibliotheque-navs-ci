@@ -2,17 +2,18 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
-import CatalogPage             from './pages/public/CatalogPage'
-import LoginPage               from './pages/public/LoginPage'
-import RegisterPage            from './pages/public/RegisterPage'
-import ProfilePage             from './pages/public/ProfilePage'
-import DashboardPage           from './pages/admin/DashboardPage'
-import BooksPage               from './pages/admin/BooksPage'
-import MembersPage             from './pages/admin/MembersPage'
-import BorrowingsPage          from './pages/admin/BorrowingsPage'
-import AdminReservationsPage   from './pages/admin/AdminReservationsPage'
-import FinancePage             from './pages/admin/FinancePage'
-import SuggestionsPage         from './pages/admin/SuggestionsPage'
+import CatalogPage           from './pages/public/CatalogPage'
+import LoginPage             from './pages/public/LoginPage'
+import RegisterPage          from './pages/public/RegisterPage'
+import ProfilePage           from './pages/public/ProfilePage'
+import DashboardPage         from './pages/admin/DashboardPage'
+import BooksPage             from './pages/admin/BooksPage'
+import MembersPage           from './pages/admin/MembersPage'
+import BorrowingsPage        from './pages/admin/BorrowingsPage'
+import AdminReservationsPage from './pages/admin/AdminReservationsPage'
+import FinancePage           from './pages/admin/FinancePage'
+import SuggestionsPage       from './pages/admin/SuggestionsPage'
+import SettingsPage          from './pages/admin/SettingsPage'
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -59,6 +60,7 @@ function App() {
         <Route path="/admin/reservations"  element={<AdminRoute><AdminReservationsPage /></AdminRoute>} />
         <Route path="/admin/finances"      element={<AdminRoute><FinancePage /></AdminRoute>} />
         <Route path="/admin/suggestions"   element={<AdminRoute><SuggestionsPage /></AdminRoute>} />
+        <Route path="/admin/settings"      element={<AdminRoute><SettingsPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
