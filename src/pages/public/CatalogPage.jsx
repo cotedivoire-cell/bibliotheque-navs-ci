@@ -17,16 +17,16 @@ function ShelfCard({ book, onClick }) {
     >
       {/* Couverture — hauteur STRICTEMENT FIXE h-44, coins droits */}
       <div
-        className="w-28 h-44 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow"
-        style={{ borderRadius: 0 }}
+        className="w-28 overflow-hidden group-hover:shadow-md transition-shadow"
+        style={{ borderRadius: 0, height: '176px', flexShrink: 0 }}
       >
         {hasCover ? (
           <img
             src={book.cover_url}
             alt={book.title}
             onError={() => setImgErr(true)}
-            className="w-full h-full object-cover object-top"
-            style={{ borderRadius: 0, display: 'block' }}
+            className="w-28 h-44 object-cover object-top rounded-none shadow-sm"
+            style={{ display: 'block', flexShrink: 0 }}
           />
         ) : (
           <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1.5">
@@ -312,7 +312,7 @@ function CatalogPage() {
                 value={pendingAuthor}
                 onChange={e => setPendingAuthor(e.target.value)}
                 placeholder="Filtrer par nom d'auteur..."
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all"
+                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-green-700 focus:ring-1 focus:ring-green-700 transition-all"
               />
             </div>
 
