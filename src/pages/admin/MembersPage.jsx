@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pencil, X, Check, Users, ShieldOff, ShieldCheck, UserCheck } from 'lucide-react'
+import { Pencil, X, Check, Users, ShieldOff, ShieldCheck, UserCheck, BarChart2, BookOpen, Star, Clock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
 
@@ -22,6 +22,10 @@ function MembersPage() {
   const [savingGroup,   setSavingGroup]   = useState(false)
   const [togglingBlock, setTogglingBlock] = useState(null)
   const [activating,    setActivating]    = useState(null)
+  // ── Stats ──
+  const [statsOpen,    setStatsOpen]    = useState(null)  // member_id
+  const [statsData,    setStatsData]    = useState({})    // { [memberId]: { total, favCat, punctuality } }
+  const [loadingStats, setLoadingStats] = useState(null)
 
   useEffect(() => { loadMembers() }, [])
 
@@ -33,6 +37,44 @@ function MembersPage() {
     setLoading(false)
   }
 
+  // ── Statistiques d'un membre ───────────────────────────────
+  const handleToggleStats = async (member) => {
+    if (statsOpen === member.id) { setStatsOpen(null); return }
+    setStatsOpen(member.id)
+    if (statsData[member.id]) return  // déjà chargé
+
+    setLoadingStats(member.id)
+    const { data: borrowings } = await supabase
+      .from('borrowings')
+      .select('*, books(categories(name))')
+      .eq('member_id', member.id)
+
+    const all      = borrowings || []
+    const total    = all.length
+    const returned = all.filter(b => b.status === 'retourné')
+
+    // Catégorie favorite
+    const catCount = {}
+    all.forEach(b => {
+      const cat = b.books?.categories?.name || 'Sans catégorie'
+      catCount[cat] = (catCount[cat] || 0) + 1
+    })
+    const favCat = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+
+    // Taux de ponctualité
+    const onTime = returned.filter(b => {
+      if (!b.returned_at || !b.due_date) return true
+      return b.returned_at <= b.due_date
+    })
+    const punctuality = returned.length > 0 ? Math.round((onTime.length / returned.length) * 100) : null
+
+    setStatsData(prev => ({
+      ...prev,
+      [member.id]: { total, favCat, punctuality, returned: returned.length }
+    }))
+    setLoadingStats(null)
+  }
+
   const handleEdit = (m) => { setEditingMember(m.id); setEditForm({ full_name: m.full_name, phone: m.phone || '' }) }
 
   const handleSaveEdit = async (id) => {
@@ -42,21 +84,18 @@ function MembersPage() {
     await loadMembers(); setEditingMember(null); setSavingEdit(false)
   }
 
-  // ── Activer un compte en attente ──
   const handleActivate = async (member) => {
     setActivating(member.id)
     await supabase.from('profiles').update({ profile_status: 'actif' }).eq('id', member.id)
     await loadMembers(); setActivating(null)
   }
 
-  // ── Toggle blocage ──
   const handleToggleBlock = async (member) => {
     setTogglingBlock(member.id)
     await supabase.from('profiles').update({ is_blocked: !member.is_blocked }).eq('id', member.id)
     await loadMembers(); setTogglingBlock(null)
   }
 
-  // ── Toggle adhésion ──
   const handleToggleMembership = (member) => {
     if (member.membership_type === 'unit') {
       setSubForm(member.id)
@@ -106,10 +145,9 @@ function MembersPage() {
     <AdminLayout>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Membres</h1>
-        <p className="text-slate-400 text-sm mt-1">{members.length} membre(s) inscrit(s)</p>
+        <p className="text-slate-400 text-sm mt-1">{members.length} membre(s)</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4"><p className="text-xs text-slate-400 mb-1">À l'unité</p><p className="text-2xl font-bold text-slate-800">{unitCount}</p></div>
         <div className="bg-amber-50 rounded-2xl border border-amber-100 shadow-sm p-4"><p className="text-xs text-amber-600 mb-1">Abonnement</p><p className="text-2xl font-bold text-amber-700">{annualCount}</p></div>
@@ -131,6 +169,8 @@ function MembersPage() {
             const isEditing   = editingMember === member.id
             const isSubForm   = subForm === member.id
             const isGroupEdit = editingGroup === member.id
+            const showStats   = statsOpen === member.id
+            const mStats      = statsData[member.id]
             const activeSub   = member.subscriptions?.find(s => s.status === 'active')
 
             return (
@@ -146,12 +186,9 @@ function MembersPage() {
                   </div>
                 ) : (
                   <div className="flex items-start gap-4">
-                    {/* Avatar */}
                     <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isBlocked ? 'bg-red-500' : isPending ? 'bg-orange-400' : isGroup ? 'bg-blue-600' : 'bg-green-700'}`}>
                       {isGroup ? <Users className="w-5 h-5 text-white" /> : <span className="text-white text-sm font-bold">{member.full_name?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()||'?'}</span>}
                     </div>
-
-                    {/* Infos */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-slate-900 text-sm truncate">{member.full_name}</p>
@@ -160,45 +197,67 @@ function MembersPage() {
                       </div>
                       <p className="text-slate-400 text-xs mt-0.5">{member.phone || '—'}</p>
                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isAnnual ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {isAnnual ? 'Abonnement' : "À l'unité"}
-                        </span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isAnnual ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{isAnnual ? 'Abonnement' : "À l'unité"}</span>
                         {isGroup && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1"><Users className="w-3 h-3" />Groupe — {member.max_borrowings} livres</span>}
                         {activeSub && <span className="text-xs text-slate-400">→ {new Date(activeSub.end_date).toLocaleDateString('fr-FR')}</span>}
                       </div>
                     </div>
-
-                    {/* Actions */}
                     <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                       <button onClick={() => handleEdit(member)} className="text-slate-400 hover:text-green-700 transition-colors p-1"><Pencil className="w-4 h-4" /></button>
-
-                      {/* Bouton Activer (si en attente) */}
+                      {/* Stats */}
+                      <button onClick={() => handleToggleStats(member)} title="Statistiques du membre"
+                        className={`p-1.5 rounded-lg transition-colors ${showStats ? 'bg-purple-100 text-purple-700' : 'text-slate-400 hover:text-purple-600 hover:bg-purple-50'}`}>
+                        <BarChart2 className="w-4 h-4" />
+                      </button>
                       {isPending && (
                         <button onClick={() => handleActivate(member)} disabled={activating === member.id}
-                          title="Activer ce compte"
-                          className="flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-                          <UserCheck className="w-3.5 h-3.5" />
-                          {activating === member.id ? '...' : 'Activer'}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-semibold disabled:opacity-50">
+                          <UserCheck className="w-3.5 h-3.5" />{activating === member.id ? '...' : 'Activer'}
                         </button>
                       )}
-
                       <button onClick={() => handleToggleBlock(member)} disabled={togglingBlock === member.id}
-                        title={isBlocked ? 'Débloquer' : 'Bloquer'}
                         className={`p-1.5 rounded-lg transition-colors ${isBlocked ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}>
                         {isBlocked ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                       </button>
-
                       <button onClick={() => handleToggleGroup(member)}
-                        title={isGroup ? "Repasser en individuel" : "Activer compte groupe"}
                         className={`p-1.5 rounded-lg transition-colors ${isGroup ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}>
                         <Users className="w-4 h-4" />
                       </button>
-
                       <button onClick={() => handleToggleMembership(member)}
                         className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${isAnnual ? 'bg-amber-500' : 'bg-slate-300'}`}>
                         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${isAnnual ? 'translate-x-6' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* ── Section statistiques ── */}
+                {showStats && (
+                  <div className="mt-4 pt-4 border-t border-purple-100">
+                    <p className="text-xs font-semibold text-purple-700 flex items-center gap-1 mb-3"><BarChart2 className="w-3.5 h-3.5" />Statistiques du membre</p>
+                    {loadingStats === member.id ? (
+                      <p className="text-xs text-slate-400">Chargement des statistiques...</p>
+                    ) : mStats ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-purple-50 rounded-xl p-3 text-center">
+                          <BookOpen className="w-4 h-4 text-purple-600 mx-auto mb-1" />
+                          <p className="text-2xl font-bold text-purple-700">{mStats.total}</p>
+                          <p className="text-xs text-purple-500 mt-0.5">Livres empruntés</p>
+                        </div>
+                        <div className="bg-green-50 rounded-xl p-3 text-center">
+                          <Star className="w-4 h-4 text-green-600 mx-auto mb-1" />
+                          <p className="text-sm font-bold text-green-700 leading-tight">{mStats.favCat}</p>
+                          <p className="text-xs text-green-500 mt-0.5">Catégorie favorite</p>
+                        </div>
+                        <div className={`rounded-xl p-3 text-center ${mStats.punctuality === null ? 'bg-slate-50' : mStats.punctuality >= 80 ? 'bg-teal-50' : 'bg-amber-50'}`}>
+                          <Clock className={`w-4 h-4 mx-auto mb-1 ${mStats.punctuality === null ? 'text-slate-400' : mStats.punctuality >= 80 ? 'text-teal-600' : 'text-amber-600'}`} />
+                          <p className={`text-2xl font-bold ${mStats.punctuality === null ? 'text-slate-500' : mStats.punctuality >= 80 ? 'text-teal-700' : 'text-amber-700'}`}>
+                            {mStats.punctuality !== null ? `${mStats.punctuality}%` : '—'}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${mStats.punctuality === null ? 'text-slate-400' : mStats.punctuality >= 80 ? 'text-teal-500' : 'text-amber-500'}`}>Ponctualité</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
 
