@@ -13,11 +13,11 @@ function ShelfCard({ book, onClick }) {
   return (
     <button
       onClick={() => onClick(book)}
-      className="flex-shrink-0 w-28 text-left focus:outline-none group"
+      className="flex-shrink-0 w-28 text-left focus:outline-none group active:scale-95 transition-transform duration-150"
     >
-      {/* Couverture — coins droits, micro-ombre */}
+      {/* Couverture — hauteur STRICTEMENT FIXE h-44, coins droits */}
       <div
-        className="w-28 h-40 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow"
+        className="w-28 h-44 overflow-hidden shadow-sm group-hover:shadow-md transition-shadow"
         style={{ borderRadius: 0 }}
       >
         {hasCover ? (
@@ -25,8 +25,8 @@ function ShelfCard({ book, onClick }) {
             src={book.cover_url}
             alt={book.title}
             onError={() => setImgErr(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            style={{ borderRadius: 0 }}
+            className="w-full h-full object-cover object-top"
+            style={{ borderRadius: 0, display: 'block' }}
           />
         ) : (
           <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1.5">
@@ -37,10 +37,15 @@ function ShelfCard({ book, onClick }) {
         )}
       </div>
 
-      {/* Voyant + titre */}
+      {/* Voyant disponibilité */}
       <div className="mt-2 flex items-start gap-1.5">
-        <span className={`flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${book.available_copies > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
-        <p className="text-xs font-medium text-gray-800 leading-tight line-clamp-2">{book.title}</p>
+        <span className={`flex-shrink-0 mt-[3px] w-1.5 h-1.5 rounded-full ${book.available_copies > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
+        <div className="min-w-0">
+          {/* Titre */}
+          <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{book.title}</p>
+          {/* Auteur */}
+          <p className="text-xs text-gray-500 mt-0.5 truncate capitalize">{book.author}</p>
+        </div>
       </div>
     </button>
   )
