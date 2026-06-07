@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
-  AreaChart, Area, defs, linearGradient, stop
+  AreaChart, Area
 } from 'recharts'
 import { BookOpen, Users, AlertTriangle, CheckCircle2, TrendingUp, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
