@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { X, BookOpen, Star, MapPin, Truck } from 'lucide-react'
+import { X, BookOpen, MapPin, Truck, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const LANG = { FR: 'Français', EN: 'Anglais' }
+
+const PICKUP_HOURS = "📍 Point de retrait ouvert du lundi au vendredi de 8h à 17h. Assurez-vous que votre coursier se présente dans ces créneaux."
 
 function StarDisplay({ rating }) {
   const full = Math.round(rating || 0)
@@ -24,25 +26,24 @@ function StarInput({ value, onChange }) {
 const generatePickupCode = () => String(Math.floor(1000 + Math.random() * 9000))
 
 function BookDetailModal({ book, onClose }) {
-  const [visible,         setVisible]         = useState(false)
-  const [reviews,         setReviews]         = useState([])
-  const [avgRating,       setAvgRating]       = useState(0)
-  const [recommendations, setRecommendations] = useState([])
-  const [canReview,       setCanReview]       = useState(false)
-  const [hasReviewed,     setHasReviewed]     = useState(false)
-  const [userId,          setUserId]          = useState(null)
-  const [userProfile,     setUserProfile]     = useState(null)
-  const [showForm,        setShowForm]        = useState(false)
-  const [reviewForm,      setReviewForm]      = useState({ rating: 0, comment: '' })
-  const [savingReview,    setSavingReview]    = useState(false)
-  const [reviewError,     setReviewError]     = useState('')
-  // ── Réservation ──
-  const [showReserveForm, setShowReserveForm] = useState(false)
-  const [pickupType,      setPickupType]      = useState('self')
-  const [savingReserve,   setSavingReserve]   = useState(false)
-  const [reserveResult,   setReserveResult]   = useState(null)  // { code, expiresAt }
-  const [reserveError,    setReserveError]    = useState('')
-  const [hasReservation,  setHasReservation]  = useState(false)
+  const [visible,          setVisible]          = useState(false)
+  const [reviews,          setReviews]          = useState([])
+  const [avgRating,        setAvgRating]        = useState(0)
+  const [recommendations,  setRecommendations]  = useState([])
+  const [canReview,        setCanReview]        = useState(false)
+  const [hasReviewed,      setHasReviewed]      = useState(false)
+  const [userId,           setUserId]           = useState(null)
+  const [userProfile,      setUserProfile]      = useState(null)
+  const [showForm,         setShowForm]         = useState(false)
+  const [reviewForm,       setReviewForm]       = useState({ rating: 0, comment: '' })
+  const [savingReview,     setSavingReview]     = useState(false)
+  const [reviewError,      setReviewError]      = useState('')
+  const [showReserveForm,  setShowReserveForm]  = useState(false)
+  const [pickupType,       setPickupType]       = useState('self')
+  const [savingReserve,    setSavingReserve]    = useState(false)
+  const [reserveResult,    setReserveResult]    = useState(null)
+  const [reserveError,     setReserveError]     = useState('')
+  const [hasReservation,   setHasReservation]   = useState(false)
 
   useEffect(() => {
     if (book) { document.body.style.overflow = 'hidden'; setTimeout(() => setVisible(true), 10); loadData() }
@@ -66,7 +67,7 @@ function BookDetailModal({ book, onClose }) {
 
     if (user) {
       const [profileRes, hasReturnedRes, hasReviewedRes, hasReservationRes] = await Promise.all([
-        supabase.from('profiles').select('is_blocked, account_type').eq('id', user.id).single(),
+        supabase.from('profiles').select('is_blocked, account_type, profile_status').eq('id', user.id).single(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'retourné').limit(1).maybeSingle(),
         supabase.from('reviews').select('id').eq('member_id', user.id).eq('book_id', book.id).maybeSingle(),
         supabase.from('reservations').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'pending').maybeSingle(),
@@ -91,28 +92,16 @@ function BookDetailModal({ book, onClose }) {
   const handleReserve = async () => {
     if (!userId) return
     setSavingReserve(true); setReserveError('')
-
-    // Vérifier si le compte est bloqué
-    if (userProfile?.is_blocked) {
-      setReserveError('Votre compte est temporairement bloqué. Contactez un gestionnaire.')
-      setSavingReserve(false); return
-    }
-
-    const code = pickupType === 'courier' ? generatePickupCode() : null
+    if (userProfile?.is_blocked) { setReserveError('Votre compte est temporairement bloqué. Contactez un gestionnaire.'); setSavingReserve(false); return }
+    const code      = pickupType === 'courier' ? generatePickupCode() : null
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-
-    const { error } = await supabase.from('reservations').insert([{
-      book_id: book.id, member_id: userId,
-      pickup_type: pickupType, pickup_code: code, expires_at: expiresAt,
-    }])
-
+    const { error } = await supabase.from('reservations').insert([{ book_id: book.id, member_id: userId, pickup_type: pickupType, pickup_code: code, expires_at: expiresAt }])
     if (error) {
-      setReserveError(error.code === '23505' ? 'Vous avez déjà une réservation active pour ce livre.' : 'Erreur lors de la réservation. Réessayez.')
+      setReserveError(error.code === '23505' ? 'Vous avez déjà une réservation active pour ce livre.' : 'Erreur. Réessayez.')
     } else {
       setReserveResult({ code, expiresAt })
       setHasReservation(true)
       setShowReserveForm(false)
-      // Décrémenter le stock
       await supabase.from('books').update({ available_copies: (book.available_copies || 1) - 1 }).eq('id', book.id)
     }
     setSavingReserve(false)
@@ -120,8 +109,10 @@ function BookDetailModal({ book, onClose }) {
 
   if (!book) return null
   const handleClose = () => { setVisible(false); setTimeout(onClose, 300) }
-  const available = book.available_copies > 0
-  const initials  = book.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
+  const available  = book.available_copies > 0
+  const isPending  = userProfile?.profile_status === 'en_attente'
+  const isBlocked  = userProfile?.is_blocked
+  const initials   = book.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -137,93 +128,104 @@ function BookDetailModal({ book, onClose }) {
         </div>
 
         <div className="px-5 pb-10 space-y-6">
-
           {/* Titre & infos */}
           <div>
             <h2 className="text-xl font-bold text-gray-900 leading-snug">{book.title}</h2>
             <p className="text-gray-500 mt-1 text-sm">{book.author}</p>
             <div className="flex flex-wrap gap-2 mt-3">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${available ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-                {available ? `${book.available_copies} exemplaire(s) disponible(s)` : 'Indisponible'}
-              </span>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${available ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>{available ? `${book.available_copies} exemplaire(s) disponible(s)` : 'Indisponible'}</span>
               {book.categories?.name && <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">{book.categories.name}</span>}
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{LANG[book.language] || 'Français'}</span>
             </div>
-            {reviews.length > 0 && (
-              <div className="flex items-center gap-2 mt-3">
-                <StarDisplay rating={avgRating} />
-                <span className="text-sm text-gray-500 font-medium">{avgRating.toFixed(1)}</span>
-                <span className="text-xs text-gray-400">({reviews.length} avis)</span>
-              </div>
-            )}
+            {reviews.length > 0 && <div className="flex items-center gap-2 mt-3"><StarDisplay rating={avgRating} /><span className="text-sm text-gray-500 font-medium">{avgRating.toFixed(1)}</span><span className="text-xs text-gray-400">({reviews.length} avis)</span></div>}
           </div>
 
           {/* Résumé */}
           {book.summary ? <div><h3 className="text-sm font-bold text-gray-900 mb-2">Résumé</h3><p className="text-gray-600 text-sm leading-relaxed">{book.summary}</p></div> : <p className="text-gray-300 text-sm italic">Aucun résumé disponible.</p>}
 
-          {/* ── Réservation ── */}
+          {/* ── Section réservation ── */}
           {userId && (
             <div>
+              {/* Confirmation réservation réussie */}
               {reserveResult ? (
-                <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
-                  <p className="text-green-800 font-semibold text-sm mb-1">Réservation confirmée !</p>
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
+                  <p className="text-green-800 font-semibold text-sm">Réservation confirmée !</p>
                   <p className="text-green-700 text-xs">Expire le {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')} à {new Date(reserveResult.expiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
                   {reserveResult.code && (
-                    <div className="mt-3 bg-white rounded-xl p-3 text-center border border-green-200">
+                    <div className="bg-white rounded-xl p-3 text-center border border-green-200">
                       <p className="text-xs text-gray-500 mb-1">Code de retrait pour ton coursier</p>
                       <p className="text-3xl font-bold text-green-700 tracking-widest">{reserveResult.code}</p>
                     </div>
                   )}
+                  {/* ── Horaires de retrait ── */}
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
+                  </div>
                 </div>
               ) : hasReservation ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-                  <p className="text-amber-800 text-sm font-medium">Vous avez déjà une réservation active pour ce livre.</p>
+                  <p className="text-amber-800 text-sm font-medium">Vous avez déjà une réservation active.</p>
                   <p className="text-amber-600 text-xs mt-1">Consultez votre espace membre pour le code de retrait.</p>
                 </div>
-              ) : available && !userProfile?.is_blocked ? (
-                <div>
-                  {!showReserveForm ? (
-                    <button onClick={() => setShowReserveForm(true)}
-                      className="w-full py-3 bg-green-700 text-white rounded-2xl text-sm font-semibold hover:bg-green-800 transition-colors">
-                      Réserver ce livre (48h)
-                    </button>
-                  ) : (
-                    <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
-                      <p className="text-sm font-semibold text-gray-900">Comment récupérer le livre ?</p>
-                      {reserveError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{reserveError}</p>}
-                      <div className="grid grid-cols-2 gap-3">
-                        <button type="button" onClick={() => setPickupType('self')}
-                          className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'self' ? 'border-green-700 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                          <MapPin className={`w-5 h-5 ${pickupType === 'self' ? 'text-green-700' : 'text-gray-400'}`} />
-                          <span className={`text-xs font-semibold ${pickupType === 'self' ? 'text-green-700' : 'text-gray-500'}`}>Je viens moi-même</span>
-                        </button>
-                        <button type="button" onClick={() => setPickupType('courier')}
-                          className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'courier' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}`}>
-                          <Truck className={`w-5 h-5 ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-400'}`} />
-                          <span className={`text-xs font-semibold ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-500'}`}>Coursier (Yango/Glovo)</span>
-                        </button>
-                      </div>
-                      {pickupType === 'courier' && (
-                        <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
-                          Un code à 4 chiffres sera généré. Ton coursier le présentera au comptoir pour récupérer le livre.
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <button onClick={() => setShowReserveForm(false)} className="flex-1 py-2.5 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">Annuler</button>
-                        <button onClick={handleReserve} disabled={savingReserve}
-                          className="flex-1 py-2.5 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 font-semibold disabled:opacity-50">
-                          {savingReserve ? '...' : 'Confirmer la réservation'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+              ) : isPending ? (
+                /* ── Compte en attente d'activation ── */
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
+                  <p className="text-orange-800 text-sm font-semibold mb-1">Compte en attente d'activation</p>
+                  <p className="text-orange-700 text-xs leading-relaxed">
+                    Veuillez faire activer votre compte au bureau des Navigateurs pour réserver. Un gestionnaire validera votre inscription.
+                  </p>
                 </div>
-              ) : userProfile?.is_blocked ? (
+              ) : isBlocked ? (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
                   <p className="text-red-700 text-sm font-medium">Compte bloqué — réservation impossible.</p>
-                  <p className="text-red-500 text-xs mt-1">Contactez un gestionnaire pour plus d'informations.</p>
+                  <p className="text-red-500 text-xs mt-1">Contactez un gestionnaire.</p>
                 </div>
+              ) : available ? (
+                /* ── Formulaire de réservation ── */
+                !showReserveForm ? (
+                  <button onClick={() => setShowReserveForm(true)} className="w-full py-3 bg-green-700 text-white rounded-2xl text-sm font-semibold hover:bg-green-800 transition-colors">
+                    Réserver ce livre (48h)
+                  </button>
+                ) : (
+                  <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
+                    <p className="text-sm font-semibold text-gray-900">Comment récupérer le livre ?</p>
+                    {reserveError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{reserveError}</p>}
+                    <div className="grid grid-cols-2 gap-3">
+                      <button type="button" onClick={() => setPickupType('self')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'self' ? 'border-green-700 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                        <MapPin className={`w-5 h-5 ${pickupType === 'self' ? 'text-green-700' : 'text-gray-400'}`} />
+                        <span className={`text-xs font-semibold ${pickupType === 'self' ? 'text-green-700' : 'text-gray-500'}`}>Je viens moi-même</span>
+                      </button>
+                      <button type="button" onClick={() => setPickupType('courier')} className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors ${pickupType === 'courier' ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                        <Truck className={`w-5 h-5 ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-400'}`} />
+                        <span className={`text-xs font-semibold ${pickupType === 'courier' ? 'text-blue-600' : 'text-gray-500'}`}>Coursier (Yango/Glovo)</span>
+                      </button>
+                    </div>
+                    {pickupType === 'courier' && (
+                      <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
+                        Un code à 4 chiffres sera généré. Ton coursier le présentera au comptoir.
+                      </div>
+                    )}
+                    {/* Horaires toujours visibles dans le formulaire */}
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowReserveForm(false)} className="flex-1 py-2.5 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50">Annuler</button>
+                      <button onClick={handleReserve} disabled={savingReserve} className="flex-1 py-2.5 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 font-semibold disabled:opacity-50">{savingReserve ? '...' : 'Confirmer la réservation'}</button>
+                    </div>
+                  </div>
+                )
               ) : null}
+            </div>
+          )}
+
+          {/* Pas connecté */}
+          {!userId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <p className="text-amber-800 text-sm font-semibold mb-1">Comment emprunter ce livre ?</p>
+              <p className="text-amber-700 text-xs leading-relaxed">Connectez-vous pour réserver en ligne, ou présentez-vous au comptoir de la bibliothèque.</p>
             </div>
           )}
 
@@ -243,17 +245,15 @@ function BookDetailModal({ book, onClose }) {
             )}
             {userId && canReview && !hasReviewed && (
               <div className="mt-4">
-                {!showForm ? (
-                  <button onClick={() => setShowForm(true)} className="text-sm text-green-700 font-medium hover:underline">+ Laisser un avis</button>
-                ) : (
+                {!showForm ? <button onClick={() => setShowForm(true)} className="text-sm text-green-700 font-medium hover:underline">+ Laisser un avis</button> : (
                   <form onSubmit={handleSubmitReview} className="bg-green-50 rounded-xl p-4 space-y-3">
                     <p className="text-xs font-semibold text-green-800 mb-1">Votre avis</p>
                     {reviewError && <p className="text-xs text-red-600">{reviewError}</p>}
                     <StarInput value={reviewForm.rating} onChange={r => setReviewForm(p => ({ ...p, rating: r }))} />
                     <textarea value={reviewForm.comment} onChange={e => setReviewForm(p => ({ ...p, comment: e.target.value }))} placeholder="Commentaire (optionnel)..." rows={2} className="w-full border border-green-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none bg-white" />
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setShowForm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">Annuler</button>
-                      <button type="submit" disabled={savingReview} className="px-4 py-1.5 text-xs text-white bg-green-700 rounded-lg hover:bg-green-800 disabled:opacity-50">{savingReview ? '...' : 'Publier'}</button>
+                      <button type="button" onClick={() => setShowForm(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg">Annuler</button>
+                      <button type="submit" disabled={savingReview} className="px-4 py-1.5 text-xs text-white bg-green-700 rounded-lg disabled:opacity-50">{savingReview ? '...' : 'Publier'}</button>
                     </div>
                   </form>
                 )}
@@ -277,14 +277,6 @@ function BookDetailModal({ book, onClose }) {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Note emprunt */}
-          {!userId && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-              <p className="text-amber-800 text-sm font-semibold mb-1">Comment emprunter ce livre ?</p>
-              <p className="text-amber-700 text-xs leading-relaxed">Connectez-vous pour réserver en ligne, ou présentez-vous directement au comptoir de la bibliothèque.</p>
             </div>
           )}
         </div>

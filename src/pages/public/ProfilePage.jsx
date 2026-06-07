@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BookOpen, Pencil, X, Check, ThumbsUp, Lightbulb, Users } from 'lucide-react'
+import { ArrowLeft, BookOpen, Pencil, X, Check, ThumbsUp, Lightbulb, Users, Clock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+
+const PICKUP_HOURS = "📍 Point de retrait ouvert du lundi au vendredi de 8h à 17h. Assurez-vous que votre coursier se présente dans ces créneaux."
 
 function DueDateBadge({ borrowing }) {
   const today = new Date(); today.setHours(0,0,0,0)
   const due = new Date(borrowing.due_date)
   const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24))
   const formatted = due.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  if (borrowing.status === 'en_retard') { const late = Math.abs(diffDays); return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">En retard de {late} jour{late > 1 ? 's' : ''}</span> }
+  if (borrowing.status === 'en_retard') { const late = Math.abs(diffDays); return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">En retard de {late} jour{late>1?'s':''}</span> }
   if (diffDays <= 2) return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">Urgent — avant le {formatted}</span>
   if (diffDays <= 7) return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">À rendre avant le {formatted}</span>
   return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">À rendre le {formatted}</span>
@@ -16,36 +18,41 @@ function DueDateBadge({ borrowing }) {
 
 function ProfilePage() {
   const navigate = useNavigate()
-  const [activeTab,  setActiveTab]  = useState('Emprunts')
-  const [profile,    setProfile]    = useState(null)
-  const [active,     setActive]     = useState([])
-  const [history,    setHistory]    = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [isEditing,  setIsEditing]  = useState(false)
-  const [editForm,   setEditForm]   = useState({ full_name: '', phone: '' })
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [editError,  setEditError]  = useState('')
-  const [userId,     setUserId]     = useState(null)
-  const [suggestions,    setSuggestions]    = useState([])
-  const [myVotes,        setMyVotes]        = useState(new Set())
-  const [sugForm,        setSugForm]        = useState({ title: '', author: '' })
-  const [savingSug,      setSavingSug]      = useState(false)
-  const [sugError,       setSugError]       = useState('')
-  const [sugSuccess,     setSugSuccess]     = useState('')
+  const [activeTab,    setActiveTab]    = useState('Emprunts')
+  const [profile,      setProfile]      = useState(null)
+  const [active,       setActive]       = useState([])
+  const [history,      setHistory]      = useState([])
+  const [reservations, setReservations] = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [isEditing,    setIsEditing]    = useState(false)
+  const [editForm,     setEditForm]     = useState({ full_name: '', phone: '' })
+  const [savingEdit,   setSavingEdit]   = useState(false)
+  const [editError,    setEditError]    = useState('')
+  const [userId,       setUserId]       = useState(null)
+  const [suggestions,  setSuggestions]  = useState([])
+  const [myVotes,      setMyVotes]      = useState(new Set())
+  const [sugForm,      setSugForm]      = useState({ title: '', author: '' })
+  const [savingSug,    setSavingSug]    = useState(false)
+  const [sugError,     setSugError]     = useState('')
+  const [sugSuccess,   setSugSuccess]   = useState('')
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { navigate('/login'); return }
       setUserId(user.id)
-      const [profileRes, borrowingsRes] = await Promise.all([
+
+      const [profileRes, borrowingsRes, reservationsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('borrowings').select('*, books(id, title, author, cover_url, categories(name))').eq('member_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('reservations').select('*, books(id, title, cover_url)').eq('member_id', user.id).eq('status', 'pending').order('created_at', { ascending: false }),
       ])
+
       setProfile(profileRes.data)
       const all = borrowingsRes.data || []
       setActive(all.filter(b => b.status === 'en_cours' || b.status === 'en_retard'))
       setHistory(all.filter(b => b.status === 'retourné'))
+      setReservations(reservationsRes.data || [])
       setLoading(false)
       loadSuggestions(user.id)
     }
@@ -94,19 +101,15 @@ function ProfilePage() {
     if (!sugForm.title.trim()) { setSugError('Le titre est requis.'); return }
     setSavingSug(true); setSugError(''); setSugSuccess('')
     const { error } = await supabase.from('suggestions').insert([{ title: sugForm.title.trim(), author: sugForm.author.trim() || null, member_id: userId }])
-    if (error) setSugError("Erreur lors de l'envoi. Réessayez.")
+    if (error) setSugError("Erreur lors de l'envoi.")
     else { setSugSuccess('Suggestion envoyée !'); setSugForm({ title: '', author: '' }); loadSuggestions(userId) }
     setSavingSug(false)
   }
 
   const MEMBERSHIP = { unit: "À l'unité", annual: 'Abonnement annuel' }
-  const isGroup     = profile?.account_type === 'group'
-  const initials    = profile?.full_name?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
-
-  // Onglets dynamiques (groupe = onglet Emprunts de groupe)
-  const TABS = isGroup
-    ? ['Emprunts de groupe', 'Historique', 'Suggestions']
-    : ['Emprunts', 'Historique', 'Suggestions']
+  const isGroup    = profile?.account_type === 'group'
+  const initials   = profile?.full_name?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'
+  const TABS       = isGroup ? ['Emprunts de groupe', 'Historique', 'Suggestions'] : ['Emprunts', 'Historique', 'Suggestions']
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-400 text-sm">Chargement...</p></div>
 
@@ -131,8 +134,8 @@ function ProfilePage() {
               <div><label className="block text-xs font-medium text-gray-500 mb-1">Nom complet</label><input type="text" value={editForm.full_name} onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
               <div><label className="block text-xs font-medium text-gray-500 mb-1">Téléphone</label><input type="text" value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setIsEditing(false)} className="flex items-center gap-1 px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50"><X className="w-3.5 h-3.5" /> Annuler</button>
-                <button onClick={handleSaveProfile} disabled={savingEdit} className="flex items-center gap-1 px-4 py-2 text-sm text-white bg-green-700 rounded-xl hover:bg-green-800 disabled:opacity-50"><Check className="w-3.5 h-3.5" />{savingEdit ? 'Sauvegarde...' : 'Enregistrer'}</button>
+                <button onClick={() => setIsEditing(false)} className="flex items-center gap-1 px-4 py-2 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50"><X className="w-3.5 h-3.5" />Annuler</button>
+                <button onClick={handleSaveProfile} disabled={savingEdit} className="flex items-center gap-1 px-4 py-2 text-sm text-white bg-green-700 rounded-xl hover:bg-green-800 disabled:opacity-50"><Check className="w-3.5 h-3.5" />{savingEdit ? '...' : 'Enregistrer'}</button>
               </div>
             </div>
           ) : (
@@ -147,17 +150,11 @@ function ProfilePage() {
                   <span className="inline-block bg-green-50 text-green-700 text-xs font-medium px-2.5 py-0.5 rounded-full">
                     Adhésion : {MEMBERSHIP[profile?.membership_type] || "À l'unité"}
                   </span>
-                  {isGroup && (
-                    <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                      <Users className="w-3 h-3" />
-                      Compte Groupe — {profile?.max_borrowings} livres max
-                    </span>
-                  )}
+                  {isGroup && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-0.5 rounded-full"><Users className="w-3 h-3" />Groupe — {profile?.max_borrowings} livres max</span>}
+                  {profile?.profile_status === 'en_attente' && <span className="inline-block bg-orange-100 text-orange-700 text-xs font-medium px-2.5 py-0.5 rounded-full">En attente d'activation</span>}
                 </div>
               </div>
-              <button onClick={handleEditOpen} className="flex-shrink-0 p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-colors">
-                <Pencil className="w-4 h-4" />
-              </button>
+              <button onClick={handleEditOpen} className="flex-shrink-0 p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-colors"><Pencil className="w-4 h-4" /></button>
             </div>
           )}
         </div>
@@ -167,45 +164,69 @@ function ProfilePage() {
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-colors ${activeTab === tab ? 'bg-green-700 text-white' : 'text-gray-500 hover:text-gray-700'}`}>
-              {tab === 'Suggestions' ? <span className="flex items-center justify-center gap-1"><Lightbulb className="w-3 h-3" />{tab}</span> :
-               tab.includes('groupe') ? <span className="flex items-center justify-center gap-1"><Users className="w-3 h-3" />{tab}</span> : tab}
+              {tab === 'Suggestions' ? <span className="flex items-center justify-center gap-1"><Lightbulb className="w-3 h-3" />{tab}</span> : tab.includes('groupe') ? <span className="flex items-center justify-center gap-1"><Users className="w-3 h-3" />{tab}</span> : tab}
             </button>
           ))}
         </div>
 
-        {/* ── Onglet Emprunts (individuel ou groupe) ── */}
+        {/* ── Onglet Emprunts / Emprunts de groupe ── */}
         {(activeTab === 'Emprunts' || activeTab === 'Emprunts de groupe') && (
-          active.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-              <BookOpen className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-gray-400 text-sm">Aucun emprunt en cours</p>
-              {isGroup && <p className="text-gray-300 text-xs mt-1">Les livres empruntés pour votre groupe apparaîtront ici</p>}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {isGroup && <p className="text-xs text-blue-600 font-medium px-1">{active.length} livre(s) actuellement sortis pour votre groupe</p>}
-              {active.map(b => (
-                <div key={b.id} className={`bg-white rounded-2xl border shadow-sm p-4 flex gap-4 ${b.status === 'en_retard' ? 'border-red-200' : 'border-gray-100'}`}>
-                  <div className="w-14 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
-                    {b.books?.cover_url ? <img src={b.books.cover_url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center"><BookOpen className="w-5 h-5 text-white opacity-40" /></div>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{b.books?.title}</h3>
-                    <p className="text-gray-400 text-xs mt-0.5 truncate">{b.books?.author}</p>
-                    {/* Destinataire (compte groupe) */}
-                    {b.borrowee_name && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Users className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                        <span className="text-xs text-blue-700 font-medium">Pour : {b.borrowee_name}</span>
-                      </div>
+          <div className="space-y-4">
+            {/* Réservations en cours */}
+            {reservations.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-blue-700">Réservations en cours ({reservations.length})</p>
+                {reservations.map(r => (
+                  <div key={r.id} className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                    <p className="font-semibold text-blue-900 text-sm">{r.books?.title}</p>
+                    <p className="text-xs text-blue-700">
+                      Expire le {new Date(r.expires_at).toLocaleDateString('fr-FR')} à {new Date(r.expires_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    {r.pickup_code && (
+                      <>
+                        <div className="bg-white rounded-xl p-3 text-center border border-blue-200">
+                          <p className="text-xs text-gray-500 mb-1">Code de retrait pour ton coursier</p>
+                          <p className="text-3xl font-bold text-green-700 tracking-widest">{r.pickup_code}</p>
+                        </div>
+                        {/* ── Horaires de retrait ── */}
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                          <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-amber-700 leading-relaxed">{PICKUP_HOURS}</p>
+                        </div>
+                      </>
                     )}
-                    <p className="text-gray-300 text-xs mt-0.5">Emprunté le {new Date(b.borrowed_at).toLocaleDateString('fr-FR')}</p>
-                    <div className="mt-2"><DueDateBadge borrowing={b} /></div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )
+                ))}
+              </div>
+            )}
+
+            {/* Emprunts actifs */}
+            {active.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                <BookOpen className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                <p className="text-gray-400 text-sm">Aucun emprunt en cours</p>
+                {isGroup && <p className="text-gray-300 text-xs mt-1">Les livres empruntés pour votre groupe apparaîtront ici</p>}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {isGroup && <p className="text-xs text-blue-600 font-medium px-1">{active.length} livre(s) sorti(s) pour votre groupe</p>}
+                {active.map(b => (
+                  <div key={b.id} className={`bg-white rounded-2xl border shadow-sm p-4 flex gap-4 ${b.status === 'en_retard' ? 'border-red-200' : 'border-gray-100'}`}>
+                    <div className="w-14 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                      {b.books?.cover_url ? <img src={b.books.cover_url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-green-700 to-green-900 flex items-center justify-center"><BookOpen className="w-5 h-5 text-white opacity-40" /></div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{b.books?.title}</h3>
+                      <p className="text-gray-400 text-xs mt-0.5 truncate">{b.books?.author}</p>
+                      {b.borrowee_name && <div className="flex items-center gap-1 mt-1"><Users className="w-3 h-3 text-blue-500 flex-shrink-0" /><span className="text-xs text-blue-700 font-medium">Pour : {b.borrowee_name}</span></div>}
+                      <p className="text-gray-300 text-xs mt-0.5">Emprunté le {new Date(b.borrowed_at).toLocaleDateString('fr-FR')}</p>
+                      <div className="mt-2"><DueDateBadge borrowing={b} /></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── Onglet Historique ── */}

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Pencil, X, Check, Users, User, ShieldOff, ShieldCheck } from 'lucide-react'
+import { Pencil, X, Check, Users, ShieldOff, ShieldCheck, UserCheck } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
 
 const TODAY       = new Date().toISOString().split('T')[0]
 const IN_ONE_YEAR = new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString().split('T')[0]
-const DEFAULT_SUB_AMOUNT = 5000  // Montant par défaut abonnement (FCFA)
+const DEFAULT_SUB_AMOUNT = 5000
 
 function MembersPage() {
   const [members,       setMembers]       = useState([])
@@ -21,6 +21,7 @@ function MembersPage() {
   const [groupQuota,    setGroupQuota]    = useState(5)
   const [savingGroup,   setSavingGroup]   = useState(false)
   const [togglingBlock, setTogglingBlock] = useState(null)
+  const [activating,    setActivating]    = useState(null)
 
   useEffect(() => { loadMembers() }, [])
 
@@ -32,16 +33,23 @@ function MembersPage() {
     setLoading(false)
   }
 
-  const handleEdit = (member) => { setEditingMember(member.id); setEditForm({ full_name: member.full_name, phone: member.phone || '' }) }
+  const handleEdit = (m) => { setEditingMember(m.id); setEditForm({ full_name: m.full_name, phone: m.phone || '' }) }
 
-  const handleSaveEdit = async (memberId) => {
+  const handleSaveEdit = async (id) => {
     if (!editForm.full_name.trim()) return
     setSavingEdit(true)
-    await supabase.from('profiles').update({ full_name: editForm.full_name.trim(), phone: editForm.phone.trim() }).eq('id', memberId)
+    await supabase.from('profiles').update({ full_name: editForm.full_name.trim(), phone: editForm.phone.trim() }).eq('id', id)
     await loadMembers(); setEditingMember(null); setSavingEdit(false)
   }
 
-  // ── Toggle blocage compte ──
+  // ── Activer un compte en attente ──
+  const handleActivate = async (member) => {
+    setActivating(member.id)
+    await supabase.from('profiles').update({ profile_status: 'actif' }).eq('id', member.id)
+    await loadMembers(); setActivating(null)
+  }
+
+  // ── Toggle blocage ──
   const handleToggleBlock = async (member) => {
     setTogglingBlock(member.id)
     await supabase.from('profiles').update({ is_blocked: !member.is_blocked }).eq('id', member.id)
@@ -71,7 +79,6 @@ function MembersPage() {
     setSubForm(null); setSavingSub(false); loadMembers()
   }
 
-  // ── Toggle groupe ──
   const handleToggleGroup = (member) => {
     if (member.account_type === 'individual') {
       setEditingGroup(member.id)
@@ -83,9 +90,9 @@ function MembersPage() {
     }
   }
 
-  const handleSaveGroup = async (memberId) => {
+  const handleSaveGroup = async (id) => {
     setSavingGroup(true)
-    await supabase.from('profiles').update({ account_type: 'group', max_borrowings: parseInt(groupQuota) || 5 }).eq('id', memberId)
+    await supabase.from('profiles').update({ account_type: 'group', max_borrowings: parseInt(groupQuota) || 5 }).eq('id', id)
     setEditingGroup(null); setSavingGroup(false); loadMembers()
   }
 
@@ -93,6 +100,7 @@ function MembersPage() {
   const annualCount  = members.filter(m => m.membership_type === 'annual').length
   const groupCount   = members.filter(m => m.account_type === 'group').length
   const blockedCount = members.filter(m => m.is_blocked).length
+  const pendingCount = members.filter(m => m.profile_status === 'en_attente').length
 
   return (
     <AdminLayout>
@@ -101,11 +109,16 @@ function MembersPage() {
         <p className="text-slate-400 text-sm mt-1">{members.length} membre(s) inscrit(s)</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"><p className="text-sm text-slate-400 mb-1">À l'unité</p><p className="text-3xl font-bold text-slate-800">{unitCount}</p></div>
-        <div className="bg-amber-50 rounded-2xl border border-amber-100 shadow-sm p-5"><p className="text-sm text-amber-600 mb-1">Abonnement</p><p className="text-3xl font-bold text-amber-700">{annualCount}</p></div>
-        <div className="bg-blue-50 rounded-2xl border border-blue-100 shadow-sm p-5"><p className="text-sm text-blue-600 mb-1">Groupes</p><p className="text-3xl font-bold text-blue-700">{groupCount}</p></div>
-        <div className="bg-red-50 rounded-2xl border border-red-100 shadow-sm p-5"><p className="text-sm text-red-500 mb-1">Bloqués</p><p className="text-3xl font-bold text-red-600">{blockedCount}</p></div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4"><p className="text-xs text-slate-400 mb-1">À l'unité</p><p className="text-2xl font-bold text-slate-800">{unitCount}</p></div>
+        <div className="bg-amber-50 rounded-2xl border border-amber-100 shadow-sm p-4"><p className="text-xs text-amber-600 mb-1">Abonnement</p><p className="text-2xl font-bold text-amber-700">{annualCount}</p></div>
+        <div className="bg-blue-50 rounded-2xl border border-blue-100 shadow-sm p-4"><p className="text-xs text-blue-600 mb-1">Groupes</p><p className="text-2xl font-bold text-blue-700">{groupCount}</p></div>
+        <div className={`rounded-2xl border shadow-sm p-4 ${pendingCount > 0 ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-xs mb-1 ${pendingCount > 0 ? 'text-orange-600' : 'text-slate-400'}`}>En attente</p>
+          <p className={`text-2xl font-bold ${pendingCount > 0 ? 'text-orange-700' : 'text-slate-700'}`}>{pendingCount}</p>
+        </div>
+        <div className="bg-red-50 rounded-2xl border border-red-100 shadow-sm p-4"><p className="text-xs text-red-500 mb-1">Bloqués</p><p className="text-2xl font-bold text-red-600">{blockedCount}</p></div>
       </div>
 
       {loading ? <p className="text-slate-400 text-sm">Chargement...</p> : members.length === 0 ? <div className="text-center py-20 text-slate-400"><p>Aucun membre</p></div> : (
@@ -114,13 +127,14 @@ function MembersPage() {
             const isAnnual    = member.membership_type === 'annual'
             const isGroup     = member.account_type === 'group'
             const isBlocked   = member.is_blocked
+            const isPending   = member.profile_status === 'en_attente'
             const isEditing   = editingMember === member.id
             const isSubForm   = subForm === member.id
             const isGroupEdit = editingGroup === member.id
             const activeSub   = member.subscriptions?.find(s => s.status === 'active')
 
             return (
-              <div key={member.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${isBlocked ? 'border-red-200' : 'border-slate-100'}`}>
+              <div key={member.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${isBlocked ? 'border-red-200' : isPending ? 'border-orange-200' : 'border-slate-100'}`}>
                 {isEditing ? (
                   <div className="space-y-3">
                     <div><label className="block text-xs font-medium text-slate-500 mb-1">Nom</label><input type="text" value={editForm.full_name} onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))} className="w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
@@ -132,12 +146,16 @@ function MembersPage() {
                   </div>
                 ) : (
                   <div className="flex items-start gap-4">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isBlocked ? 'bg-red-500' : isGroup ? 'bg-blue-600' : 'bg-green-700'}`}>
+                    {/* Avatar */}
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isBlocked ? 'bg-red-500' : isPending ? 'bg-orange-400' : isGroup ? 'bg-blue-600' : 'bg-green-700'}`}>
                       {isGroup ? <Users className="w-5 h-5 text-white" /> : <span className="text-white text-sm font-bold">{member.full_name?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()||'?'}</span>}
                     </div>
+
+                    {/* Infos */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-slate-900 text-sm truncate">{member.full_name}</p>
+                        {isPending && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">En attente</span>}
                         {isBlocked && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Bloqué</span>}
                       </div>
                       <p className="text-slate-400 text-xs mt-0.5">{member.phone || '—'}</p>
@@ -149,21 +167,33 @@ function MembersPage() {
                         {activeSub && <span className="text-xs text-slate-400">→ {new Date(activeSub.end_date).toLocaleDateString('fr-FR')}</span>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={() => handleEdit(member)} className="text-slate-400 hover:text-green-700 transition-colors"><Pencil className="w-4 h-4" /></button>
-                      {/* Toggle blocage */}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                      <button onClick={() => handleEdit(member)} className="text-slate-400 hover:text-green-700 transition-colors p-1"><Pencil className="w-4 h-4" /></button>
+
+                      {/* Bouton Activer (si en attente) */}
+                      {isPending && (
+                        <button onClick={() => handleActivate(member)} disabled={activating === member.id}
+                          title="Activer ce compte"
+                          className="flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
+                          <UserCheck className="w-3.5 h-3.5" />
+                          {activating === member.id ? '...' : 'Activer'}
+                        </button>
+                      )}
+
                       <button onClick={() => handleToggleBlock(member)} disabled={togglingBlock === member.id}
-                        title={isBlocked ? 'Débloquer ce compte' : 'Bloquer ce compte'}
+                        title={isBlocked ? 'Débloquer' : 'Bloquer'}
                         className={`p-1.5 rounded-lg transition-colors ${isBlocked ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}>
                         {isBlocked ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                       </button>
-                      {/* Toggle groupe */}
+
                       <button onClick={() => handleToggleGroup(member)}
-                        title={isGroup ? "Repasser en individuel" : "Activer le compte groupe"}
+                        title={isGroup ? "Repasser en individuel" : "Activer compte groupe"}
                         className={`p-1.5 rounded-lg transition-colors ${isGroup ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}>
                         <Users className="w-4 h-4" />
                       </button>
-                      {/* Toggle adhésion */}
+
                       <button onClick={() => handleToggleMembership(member)}
                         className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${isAnnual ? 'bg-amber-500' : 'bg-slate-300'}`}>
                         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${isAnnual ? 'translate-x-6' : 'translate-x-0.5'}`} />
@@ -176,23 +206,18 @@ function MembersPage() {
                 {isGroupEdit && (
                   <div className="mt-4 pt-4 border-t border-blue-100 space-y-3">
                     <p className="text-xs font-semibold text-blue-700 flex items-center gap-1"><Users className="w-3.5 h-3.5" />Activer le compte groupe</p>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Quota maximum de livres simultanés</label>
-                      <div className="flex gap-2">
-                        {[3, 5, 10].map(q => (
-                          <button key={q} type="button" onClick={() => setGroupQuota(q)} className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${groupQuota === q ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>{q} livres</button>
-                        ))}
-                        <input type="number" min="2" max="20" value={groupQuota} onChange={e => setGroupQuota(parseInt(e.target.value) || 5)} className="w-20 border border-slate-200 px-3 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                      </div>
+                    <div className="flex gap-2">
+                      {[3, 5, 10].map(q => <button key={q} type="button" onClick={() => setGroupQuota(q)} className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${groupQuota === q ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}>{q} livres</button>)}
+                      <input type="number" min="2" max="20" value={groupQuota} onChange={e => setGroupQuota(parseInt(e.target.value)||5)} className="w-20 border border-slate-200 px-3 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditingGroup(null)} className="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">Annuler</button>
+                      <button onClick={() => setEditingGroup(null)} className="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">Annuler</button>
                       <button onClick={() => handleSaveGroup(member.id)} disabled={savingGroup} className="flex items-center gap-1 px-4 py-1.5 text-xs text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"><Users className="w-3 h-3" />{savingGroup ? '...' : 'Activer'}</button>
                     </div>
                   </div>
                 )}
 
-                {/* Formulaire abonnement avec montant modifiable */}
+                {/* Formulaire abonnement */}
                 {isSubForm && (
                   <div className="mt-4 pt-4 border-t border-amber-100 space-y-3">
                     <p className="text-xs font-semibold text-amber-700">Nouvel abonnement annuel</p>
@@ -200,16 +225,14 @@ function MembersPage() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-slate-500 mb-1">Montant (FCFA)</label>
-                        <input type="number" min="0" value={subData.amount_paid}
-                          onChange={e => setSubData(p => ({ ...p, amount_paid: e.target.value }))}
-                          className="w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                        <input type="number" min="0" value={subData.amount_paid} onChange={e => setSubData(p => ({ ...p, amount_paid: e.target.value }))} className="w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
                         <p className="text-xs text-slate-400 mt-0.5">Modifiable (tarif réduit, gratuité...)</p>
                       </div>
                       <div><label className="block text-xs text-slate-500 mb-1">Début</label><input type="date" value={subData.start_date} onChange={e => setSubData(p => ({ ...p, start_date: e.target.value }))} className="w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" /></div>
                       <div><label className="block text-xs text-slate-500 mb-1">Fin</label><input type="date" value={subData.end_date} min={subData.start_date} onChange={e => setSubData(p => ({ ...p, end_date: e.target.value }))} className="w-full border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" /></div>
                     </div>
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setSubForm(null)} className="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">Annuler</button>
+                      <button onClick={() => setSubForm(null)} className="px-3 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">Annuler</button>
                       <button onClick={() => handleCreateSub(member)} disabled={savingSub} className="px-4 py-1.5 text-xs text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50 font-semibold">{savingSub ? '...' : "Créer l'abonnement"}</button>
                     </div>
                   </div>
