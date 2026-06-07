@@ -300,10 +300,14 @@ function ProfilePage() {
         <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1">
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-xs font-medium rounded-xl transition-all ${
+              className={`flex-1 py-2 text-xs font-medium rounded-xl transition-all flex items-center justify-center gap-1 ${
                 activeTab === tab ? 'bg-green-700 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'
               }`}>
-              {tab}
+              {tab.includes('groupe') && <Users className="w-3 h-3" strokeWidth={1.5} />}
+              {tab === 'Emprunts' && <BookMarked className="w-3 h-3" strokeWidth={1.5} />}
+              {tab === 'Historique' && <History className="w-3 h-3" strokeWidth={1.5} />}
+              {tab === 'Suggestions' && <Lightbulb className="w-3 h-3" strokeWidth={1.5} />}
+              <span>{tab}</span>
             </button>
           ))}
         </div>
