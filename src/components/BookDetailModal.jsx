@@ -90,11 +90,13 @@ function BookDetailModal({ book, onClose }) {
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
 
-    // Charger le montant de contribution depuis settings
+    // Charger les paramètres dynamiques depuis settings
     const { data: settingsData } = await supabase.from('settings').select('key, value')
     if (settingsData) {
-      const fee = settingsData.find(s => s.key === 'single_borrow_fee_default')
-      if (fee) setBorrowFee(parseInt(fee.value) || 500)
+      const fee      = settingsData.find(s => s.key === 'single_borrow_fee_default')
+      const duration = settingsData.find(s => s.key === 'standard_borrow_duration')
+      if (fee)      setBorrowFee(parseInt(fee.value) || 500)
+      if (duration) setBorrowDuration(parseInt(duration.value) || 14)
     }
 
     const [reviewsRes, recoRes, activeRes, reserveRes] = await Promise.all([
@@ -305,11 +307,11 @@ function BookDetailModal({ book, onClose }) {
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
                   <p className="text-green-800 font-semibold text-sm">Réservation confirmée</p>
                   <p className="text-green-800 text-xs leading-relaxed font-medium">
-                    Demande enregistrée ! Durée du prêt : {borrowDuration} jours. Frais d'emprunt : {feeLabel}.
+                    Demande enregistrée ! Durée de l'emprunt : {borrowDuration} jours. Frais d'emprunt : {feeLabel}.
                   </p>
                   <div className="bg-white border border-green-200 rounded-xl p-3 space-y-1.5 mt-1">
                     <div className="flex justify-between">
-                      <span className="text-xs text-gray-500">Durée du prêt</span>
+                      <span className="text-xs text-gray-500">Durée de l'emprunt</span>
                       <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
                     </div>
                     <div className="flex justify-between">
@@ -372,7 +374,7 @@ function BookDetailModal({ book, onClose }) {
                       <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500 font-light">Durée du prêt</span>
+                      <span className="text-xs text-gray-500 font-light">Durée de l'emprunt</span>
                       <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
                     </div>
                     <div className="flex justify-between items-center">
