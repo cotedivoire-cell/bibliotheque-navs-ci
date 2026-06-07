@@ -60,8 +60,10 @@ function LoanCard({ borrowing }) {
         {borrowing.books?.cover_url ? (
           <img src={borrowing.books.cover_url} alt="" className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center">
-            <BookOpen className="w-4 h-4 text-white/40" strokeWidth={1} />
+          <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1">
+            <p className="text-[10px] text-gray-400 font-light text-center leading-tight line-clamp-3">
+              {borrowing.books?.title}
+            </p>
           </div>
         )}
       </div>
@@ -298,14 +300,10 @@ function ProfilePage() {
         <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1">
           {TABS.map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-xs font-medium rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 text-xs font-medium rounded-xl transition-all ${
                 activeTab === tab ? 'bg-green-700 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'
               }`}>
-              {tab.includes('groupe') && <Users className="w-3 h-3" strokeWidth={1.5} />}
-              {tab === 'Emprunts' && <BookMarked className="w-3 h-3" strokeWidth={1.5} />}
-              {tab === 'Historique' && <History className="w-3 h-3" strokeWidth={1.5} />}
-              {tab === 'Suggestions' && <Lightbulb className="w-3 h-3" strokeWidth={1.5} />}
-              <span>{tab}</span>
+              {tab}
             </button>
           ))}
         </div>
@@ -323,7 +321,9 @@ function ProfilePage() {
                     <div className="w-10 h-14 bg-gray-100 flex-shrink-0 overflow-hidden shadow-[2px_2px_6px_rgba(0,0,0,0.08)]" style={{ borderRadius: 0 }}>
                       {r.books?.cover_url
                         ? <img src={r.books.cover_url} alt="" className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
-                        : <div className="w-full h-full bg-green-800" />}
+                        : <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1">
+                      <p className="text-[10px] text-gray-400 font-light text-center leading-tight line-clamp-3">{r.books?.title}</p>
+                    </div>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm truncate">{r.books?.title}</p>
@@ -383,7 +383,9 @@ function ProfilePage() {
                   <div className="w-10 h-14 bg-gray-100 flex-shrink-0 overflow-hidden shadow-[2px_2px_6px_rgba(0,0,0,0.06)]" style={{ borderRadius: 0 }}>
                     {b.books?.cover_url
                       ? <img src={b.books.cover_url} alt="" className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
-                      : <div className="w-full h-full bg-gray-200" />}
+                      : <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1">
+                      <p className="text-[10px] text-gray-400 font-light text-center leading-tight line-clamp-3">{b.books?.title}</p>
+                    </div>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 text-sm truncate">{b.books?.title}</p>
@@ -436,7 +438,7 @@ function ProfilePage() {
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
                 </div>
                 <button type="submit" disabled={savingSug}
-                  className="w-full py-2.5 bg-green-700 text-white rounded-xl text-sm font-semibold tracking-wide hover:bg-green-800 disabled:opacity-50 transition-colors">
+                  className="w-full py-3 bg-green-700 text-white rounded-xl text-sm font-semibold tracking-wide hover:bg-green-800 active:scale-[.98] disabled:opacity-50 transition-all shadow-sm">
                   {savingSug ? 'Envoi...' : 'Soumettre ma suggestion'}
                 </button>
               </form>
