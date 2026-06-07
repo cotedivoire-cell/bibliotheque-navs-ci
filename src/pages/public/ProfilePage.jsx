@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BookOpen, Pencil, X, Check, ThumbsUp, Lightbulb, Users, Clock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-const PICKUP_HOURS = "📍 Point de retrait ouvert du lundi au vendredi de 8h à 17h. Assurez-vous que votre coursier se présente dans ces créneaux."
+const PICKUP_HOURS = "📍 Point de retrait ouvert du mardi au vendredi de 8h30 à 17h00. Assurez-vous que votre coursier se présente dans ces créneaux."
 
 function DueDateBadge({ borrowing }) {
   const today = new Date(); today.setHours(0,0,0,0)

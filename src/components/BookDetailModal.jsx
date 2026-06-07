@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 
 const LANG = { FR: 'Français', EN: 'Anglais' }
 
-const PICKUP_HOURS = "📍 Point de retrait ouvert du lundi au vendredi de 8h à 17h. Assurez-vous que votre coursier se présente dans ces créneaux."
+const PICKUP_HOURS = "📍 Point de retrait ouvert du mardi au vendredi de 8h30 à 17h00. Assurez-vous que votre coursier se présente dans ces créneaux."
 
 function StarDisplay({ rating }) {
   const full = Math.round(rating || 0)
