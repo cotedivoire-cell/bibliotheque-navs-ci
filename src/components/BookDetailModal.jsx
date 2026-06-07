@@ -239,7 +239,7 @@ function BookDetailModal({ book, onClose }) {
             {/* Badges harmonisés */}
             <div className="flex flex-wrap gap-2 mt-3">
               <span className={`rounded-full border text-xs px-3 py-1 ${stockOk ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-400'}`}>
-                {stockOk ? `${realStock ?? book.available_copies} dispo.` : 'Indisponible'}
+                {stockOk ? `${realStock ?? book.available_copies} ex. disponible` : 'Indisponible'}
               </span>
               {book.categories?.name && (
                 <span className="rounded-full border border-gray-200 text-gray-500 text-xs px-3 py-1">
