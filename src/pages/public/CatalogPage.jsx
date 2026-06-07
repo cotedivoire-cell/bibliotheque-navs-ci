@@ -17,16 +17,16 @@ function ShelfCard({ book, onClick }) {
     >
       {/* Couverture — hauteur STRICTEMENT FIXE h-44, coins droits */}
       <div
-        className="w-28 overflow-hidden group-hover:shadow-md transition-shadow"
-        style={{ borderRadius: 0, height: '176px', flexShrink: 0 }}
+        className="w-28 h-48 overflow-hidden group-hover:shadow-md transition-shadow"
+        style={{ borderRadius: 0 }}
       >
         {hasCover ? (
           <img
             src={book.cover_url}
             alt={book.title}
             onError={() => setImgErr(true)}
-            className="w-28 h-44 object-cover object-top rounded-none shadow-sm"
-            style={{ display: 'block', flexShrink: 0 }}
+            className="w-full h-48 object-cover object-top rounded-none shadow-sm"
+            style={{ display: 'block' }}
           />
         ) : (
           <div className="w-full h-full bg-gray-100 border border-gray-200 flex items-center justify-center p-1.5">
@@ -42,7 +42,7 @@ function ShelfCard({ book, onClick }) {
         <span className={`flex-shrink-0 mt-[3px] w-1.5 h-1.5 rounded-full ${book.available_copies > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
         <div className="min-w-0">
           {/* Titre */}
-          <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{book.title}</p>
+          <p className="h-10 overflow-hidden line-clamp-2 text-xs font-medium text-gray-900 leading-tight">{book.title}</p>
           {/* Auteur */}
           <p className="text-xs text-gray-500 mt-0.5 truncate capitalize">{book.author}</p>
         </div>
@@ -271,7 +271,7 @@ function CatalogPage() {
                 </div>
 
                 {/* Ligne horizontale de livres */}
-                <div className="flex overflow-x-auto gap-4 px-4 pb-2 scrollbar-none">
+                <div className="flex items-start overflow-x-auto gap-4 px-4 pb-2 scrollbar-none">
                   {shelf.books.map(book => (
                     <ShelfCard key={book.id} book={book} onClick={setSelectedBook} />
                   ))}
@@ -312,7 +312,7 @@ function CatalogPage() {
                 value={pendingAuthor}
                 onChange={e => setPendingAuthor(e.target.value)}
                 placeholder="Filtrer par nom d'auteur..."
-                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-green-700 focus:ring-1 focus:ring-green-700 transition-all"
+                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-green-700 focus:bg-white"
               />
             </div>
 
