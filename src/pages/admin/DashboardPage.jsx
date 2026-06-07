@@ -5,7 +5,8 @@ import {
   PieChart, Pie, Cell, Legend, ResponsiveContainer
 } from 'recharts'
 import {
-  BookOpen, Users, AlertTriangle, CheckCircle2
+  BookOpen, Users, AlertTriangle, CheckCircle2,
+  TrendingUp, Calendar
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -16,7 +17,7 @@ const PIE_COLORS = ['#15803d','#f59e0b','#3b82f6','#8b5cf6','#ef4444','#06b6d4',
 function BarTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3">
+    <div className="bg-white border border-gray-100 rounded-2xl shadow-xl px-4 py-3">
       <p className="text-sm font-semibold text-gray-900">{label}</p>
       <p className="text-green-700 text-sm font-medium mt-0.5">{payload[0].value} emprunt(s)</p>
     </div>
@@ -26,10 +27,51 @@ function BarTooltip({ active, payload, label }) {
 function PieTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3">
+    <div className="bg-white border border-gray-100 rounded-2xl shadow-xl px-4 py-3">
       <p className="text-sm font-semibold text-gray-900">{payload[0].name}</p>
       <p className="text-sm text-gray-600 mt-0.5">{payload[0].value} livre(s)</p>
       <p className="text-xs text-gray-400">{payload[0].payload.percent}% du catalogue</p>
+    </div>
+  )
+}
+
+/* ── Carte statistique inventaire ── */
+function StatCard({ icon: Icon, iconColor, label, value, valueColor = 'text-green-800', alert = false }) {
+  return (
+    <div className={`bg-white rounded-3xl p-6 shadow-[0_20px_60px_rgba(148,163,184,0.18)] flex flex-col gap-4 ${alert && value > 0 ? 'border border-red-100' : ''}`}>
+      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${alert && value > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+        <Icon className={`w-5 h-5 ${iconColor}`} strokeWidth={1.8} />
+      </div>
+      <div>
+        <p className={`font-extrabold text-4xl leading-none ${valueColor}`}>{value === null ? '—' : value}</p>
+        <p className="text-xs text-slate-400 font-medium mt-2">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+/* ── Carte finance premium ── */
+function FinanceCard({ label, amount, subtitle, loading }) {
+  return (
+    <div className="bg-white rounded-3xl p-8 shadow-[0_20px_60px_rgba(148,163,184,0.18)] flex flex-col gap-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+        </div>
+        <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+          <TrendingUp className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />
+        </div>
+      </div>
+      <div>
+        {loading ? (
+          <div className="h-9 w-36 bg-slate-100 rounded-xl animate-pulse" />
+        ) : (
+          <p className="text-3xl font-bold text-slate-900 tracking-tight">
+            {(amount || 0).toLocaleString('fr-FR')} <span className="text-lg font-medium text-slate-400">FCFA</span>
+          </p>
+        )}
+        <p className="text-xs text-emerald-600 font-medium mt-2">{subtitle}</p>
+      </div>
     </div>
   )
 }
@@ -45,8 +87,8 @@ function DashboardPage() {
   const [loading,       setLoading]       = useState(true)
   const [chartsLoading, setChartsLoading] = useState(true)
   const [stats,         setStats]         = useState({
-    totalBooks: 0, availableBooks: 0, activeBorrowings: 0,
-    totalMembers: 0, overdueCount: 0, revenueMonth: 0, revenueYear: 0,
+    totalBooks: 0, availableBooks: 0, totalMembers: 0,
+    overdueCount: 0, revenueMonth: 0, revenueYear: 0,
   })
   const [monthlyData,  setMonthlyData]  = useState([])
   const [categoryData, setCategoryData] = useState([])
@@ -58,15 +100,14 @@ function DashboardPage() {
       setAdmin(profile)
 
       const [
-        booksRes, borrowingsRes, membersRes, overdueRes,
+        booksRes, membersRes, overdueRes,
         allBorrowRes, catsRes,
         monthBorrowRes, yearBorrowRes, yearSubRes,
       ] = await Promise.all([
         supabase.from('books').select('available_copies, total_copies').eq('is_active', true),
-        supabase.from('borrowings').select('id', { count: 'exact' }).eq('status', 'en_cours'),
         supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'member'),
         supabase.from('borrowings').select('id', { count: 'exact' }).eq('status', 'en_retard'),
-        supabase.from('borrowings').select('borrowed_at').gte('borrowed_at', `${currentYear}-01-01`).lte('borrowed_at', `${currentYear}-12-31`),
+        supabase.from('borrowings').select('borrowed_at').gte('borrowed_at', `${currentYear}-01-01`),
         supabase.from('books').select('category_id, categories(name)').eq('is_active', true),
         supabase.from('borrowings').select('amount_paid').eq('loan_type', 'location').gte('created_at', monthStart),
         supabase.from('borrowings').select('amount_paid').eq('loan_type', 'location').gte('created_at', yearStart),
@@ -78,24 +119,23 @@ function DashboardPage() {
       const revenueYearS = yearSubRes.data?.reduce((s, b)     => s + (b.amount_paid || 0), 0) || 0
 
       setStats({
-        totalBooks:    booksRes.data?.reduce((s, b) => s + b.total_copies, 0)     || 0,
-        availableBooks:booksRes.data?.reduce((s, b) => s + b.available_copies, 0) || 0,
-        activeBorrowings: borrowingsRes.count || 0,
-        totalMembers:  membersRes.count || 0,
-        overdueCount:  overdueRes.count || 0,
+        totalBooks:     booksRes.data?.reduce((s, b) => s + b.total_copies, 0)     || 0,
+        availableBooks: booksRes.data?.reduce((s, b) => s + b.available_copies, 0) || 0,
+        totalMembers:   membersRes.count  || 0,
+        overdueCount:   overdueRes.count  || 0,
         revenueMonth,
-        revenueYear:   revenueYearB + revenueYearS,
+        revenueYear:    revenueYearB + revenueYearS,
       })
       setLoading(false)
 
       // Graphique 1 : emprunts par mois
-      const monthly = MONTHS.map(month => ({ month, emprunts: 0 }))
+      const monthly = MONTHS.map(m => ({ month: m, emprunts: 0 }))
       allBorrowRes.data?.forEach(b => {
         monthly[new Date(b.borrowed_at).getMonth()].emprunts++
       })
       setMonthlyData(monthly)
 
-      // Graphique 2 : livres par catégorie
+      // Graphique 2 : répartition par catégorie
       const catMap = {}
       catsRes.data?.forEach(book => {
         const name = book.categories?.name || 'Sans catégorie'
@@ -104,7 +144,11 @@ function DashboardPage() {
       const total = Object.values(catMap).reduce((s, v) => s + v, 0)
       setCategoryData(
         Object.entries(catMap)
-          .map(([name, value]) => ({ name, value, percent: total > 0 ? Math.round((value / total) * 100) : 0 }))
+          .map(([name, value]) => ({
+            name,
+            value,
+            percent: total > 0 ? Math.round((value / total) * 100) : 0,
+          }))
           .sort((a, b) => b.value - a.value)
       )
       setChartsLoading(false)
@@ -112,92 +156,65 @@ function DashboardPage() {
     load()
   }, [])
 
-  const fmt = (n) => (n || 0).toLocaleString('fr-FR') + ' FCFA'
-  const v   = (n) => loading ? '—' : n
+  const v = (n) => loading ? null : n
 
   return (
     <AdminLayout>
+
       {/* ── En-tête ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tableau de bord</h1>
-          <p className="text-slate-400 text-sm mt-1">Bienvenue, {admin?.full_name || 'Administrateur'}</p>
+          <p className="text-slate-400 text-sm mt-1 font-light">
+            Bonjour, <span className="font-medium text-slate-600">{admin?.full_name || 'Administrateur'}</span>
+          </p>
         </div>
         <button onClick={() => navigate('/admin/livres')}
-          className="inline-flex items-center gap-2 bg-green-700 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-green-800 active:scale-95 transition-all shadow-sm">
+          className="inline-flex items-center gap-2 bg-green-700 text-white px-6 py-3 rounded-2xl text-sm font-semibold hover:bg-green-800 active:scale-95 transition-all shadow-sm">
           + Ajouter un livre
         </button>
       </div>
 
-      {/* ── Section 1 : Inventaire & Membres ── */}
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Inventaire & Membres</p>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-
-        {/* Total Livres */}
-        <div className="bg-gray-50 rounded-2xl p-6 shadow-sm flex flex-col gap-3">
-          <BookOpen className="w-6 h-6 text-green-800" strokeWidth={1.8} />
-          <div>
-            <p className="font-extrabold text-4xl text-green-800 leading-none">{v(stats.totalBooks)}</p>
-            <p className="text-xs text-slate-400 font-medium mt-1.5">Total Livres</p>
-          </div>
-        </div>
-
-        {/* Disponibles */}
-        <div className="bg-gray-50 rounded-2xl p-6 shadow-sm flex flex-col gap-3">
-          <CheckCircle2 className="w-6 h-6 text-gray-500" strokeWidth={1.8} />
-          <div>
-            <p className="font-extrabold text-4xl text-gray-900 leading-none">{v(stats.availableBooks)}</p>
-            <p className="text-xs text-slate-400 font-medium mt-1.5">Disponibles</p>
-          </div>
-        </div>
-
-        {/* Membres */}
-        <div className="bg-gray-50 rounded-2xl p-6 shadow-sm flex flex-col gap-3">
-          <Users className="w-6 h-6 text-green-800" strokeWidth={1.8} />
-          <div>
-            <p className="font-extrabold text-4xl text-green-800 leading-none">{v(stats.totalMembers)}</p>
-            <p className="text-xs text-slate-400 font-medium mt-1.5">Membres</p>
-          </div>
-        </div>
-
-        {/* Alertes Retards */}
-        <div className={`bg-gray-50 rounded-2xl p-6 shadow-sm flex flex-col gap-3 ${stats.overdueCount > 0 ? 'border border-red-100' : ''}`}>
-          <AlertTriangle className="w-6 h-6 text-red-500" strokeWidth={1.8} />
-          <div>
-            <p className="font-extrabold text-4xl text-red-600 leading-none">{v(stats.overdueCount)}</p>
-            <p className="text-xs text-slate-400 font-medium mt-1.5">Alertes Retards</p>
-          </div>
-        </div>
+      {/* ── Section Inventaire ── */}
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Inventaire & Membres</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard icon={BookOpen}      iconColor="text-green-800"  label="Total Livres"     value={v(stats.totalBooks)}     valueColor="text-green-800"  />
+        <StatCard icon={CheckCircle2}  iconColor="text-slate-500"  label="Disponibles"      value={v(stats.availableBooks)} valueColor="text-slate-900"  />
+        <StatCard icon={Users}         iconColor="text-green-800"  label="Membres"          value={v(stats.totalMembers)}   valueColor="text-green-800"  />
+        <StatCard icon={AlertTriangle} iconColor="text-red-500"    label="Alertes Retards"  value={v(stats.overdueCount)}   valueColor="text-red-600"    alert />
       </div>
 
-      {/* ── Section 2 : Finances ── */}
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Finances</p>
-      <div className="grid grid-cols-2 gap-4 mb-10">
-        <div className="bg-teal-50 border border-teal-100 rounded-2xl p-5">
-          <p className="text-xs font-medium text-teal-700 opacity-70 mb-2">Recettes du mois</p>
-          <p className="text-2xl font-bold text-teal-800">{loading ? '—' : fmt(stats.revenueMonth)}</p>
-          <p className="text-xs text-teal-600 opacity-50 mt-1">Locations uniquement</p>
-        </div>
-        <div className="bg-teal-50 border border-teal-100 rounded-2xl p-5">
-          <p className="text-xs font-medium text-teal-700 opacity-70 mb-2">Recettes {currentYear}</p>
-          <p className="text-2xl font-bold text-teal-800">{loading ? '—' : fmt(stats.revenueYear)}</p>
-          <p className="text-xs text-teal-600 opacity-50 mt-1">Locations + abonnements</p>
-        </div>
+      {/* ── Section Finances ── */}
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Finances</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
+        <FinanceCard
+          label="Recettes du mois"
+          amount={stats.revenueMonth}
+          subtitle="Locations uniquement"
+          loading={loading}
+        />
+        <FinanceCard
+          label={`Recettes ${currentYear}`}
+          amount={stats.revenueYear}
+          subtitle="Locations + abonnements"
+          loading={loading}
+        />
       </div>
 
       {/* ── Graphiques ── */}
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-bold text-slate-900">Analyses et Tendances</h2>
-        <span className="text-xs text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+        <h2 className="text-lg font-bold text-slate-900">Analyses & Tendances</h2>
+        <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm">
+          <Calendar className="w-3.5 h-3.5" strokeWidth={1.5} />
           Année {currentYear}
-        </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Histogramme emprunts */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+        {/* Histogramme */}
+        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(148,163,184,0.18)] p-6">
           <h3 className="text-sm font-semibold text-slate-800">Évolution des emprunts</h3>
-          <p className="text-xs text-slate-400 mt-0.5 mb-6">Emprunts créés mois par mois</p>
+          <p className="text-xs text-slate-400 mt-0.5 mb-6 font-light">Emprunts créés mois par mois</p>
           {chartsLoading ? (
             <div className="h-52 flex items-end gap-2 px-2 animate-pulse">
               {[40,65,30,80,55,70,45,90,60,75,35,50].map((h,i) => (
@@ -217,10 +234,10 @@ function DashboardPage() {
           )}
         </div>
 
-        {/* Camembert catégories */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        {/* Camembert */}
+        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(148,163,184,0.18)] p-6">
           <h3 className="text-sm font-semibold text-slate-800">Répartition par catégorie</h3>
-          <p className="text-xs text-slate-400 mt-0.5 mb-6">Proportion de livres par thème</p>
+          <p className="text-xs text-slate-400 mt-0.5 mb-6 font-light">Proportion de livres par thème</p>
           {chartsLoading ? (
             <div className="h-52 flex items-center justify-center">
               <div className="w-32 h-32 rounded-full border-8 border-slate-100 animate-pulse" />
@@ -243,18 +260,18 @@ function DashboardPage() {
       </div>
 
       {/* ── Accès rapides ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Accès rapides</h2>
+      <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(148,163,184,0.18)] p-6">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Accès rapides</p>
         <div className="flex flex-wrap gap-3">
           {[
-            { label: 'Gérer les livres',     path: '/admin/livres'       },
-            { label: 'Gérer les membres',    path: '/admin/membres'      },
-            { label: 'Voir les emprunts',    path: '/admin/emprunts'     },
-            { label: 'Réservations',         path: '/admin/reservations' },
-            { label: 'Finances',             path: '/admin/finances'     },
+            { label: 'Gérer les livres',  path: '/admin/livres'       },
+            { label: 'Gérer les membres', path: '/admin/membres'      },
+            { label: 'Emprunts',          path: '/admin/emprunts'     },
+            { label: 'Réservations',      path: '/admin/reservations' },
+            { label: 'Finances',          path: '/admin/finances'     },
           ].map(item => (
             <button key={item.path} onClick={() => navigate(item.path)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors">
+              className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-sm font-medium transition-colors border border-slate-100">
               {item.label}
             </button>
           ))}
