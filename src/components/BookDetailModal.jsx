@@ -352,7 +352,6 @@ function BookDetailModal({ book, onClose }) {
                 </div>
 
               ) : !showReserveForm ? (
-                {/* ── Bloc infos emprunt ── */}
                 <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1.5">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-500 font-light">Date de la demande</span>
