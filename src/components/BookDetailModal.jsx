@@ -68,6 +68,7 @@ function BookDetailModal({ book, onClose }) {
   const [realStock,       setRealStock]       = useState(null)
   const [summaryExpanded, setSummaryExpanded] = useState(false)
   const [imgError,        setImgError]        = useState(false)
+  const [borrowFee,       setBorrowFee]       = useState(500)
 
   useEffect(() => {
     if (book) {
@@ -87,6 +88,13 @@ function BookDetailModal({ book, onClose }) {
     if (!book) return
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
+
+    // Charger le montant de contribution depuis settings
+    const { data: settingsData } = await supabase.from('settings').select('key, value')
+    if (settingsData) {
+      const fee = settingsData.find(s => s.key === 'single_borrow_fee_default')
+      if (fee) setBorrowFee(parseInt(fee.value) || 500)
+    }
 
     const [reviewsRes, recoRes, activeRes, reserveRes] = await Promise.all([
       supabase.from('reviews').select('*, profiles(full_name)').eq('book_id', book.id).order('created_at', { ascending: false }),
@@ -180,6 +188,11 @@ function BookDetailModal({ book, onClose }) {
     else { setShowReviewForm(false); setHasReviewed(true); setReviewForm({ rating: 0, comment: '' }); loadData() }
     setSavingReview(false)
   }
+
+
+  const isAnnual  = ['annual', 'actif_annuel'].includes(userProfile?.membership_type) || userProfile?.profile_status === 'actif_annuel'
+  const feeLabel  = isAnnual ? "Inclus dans l'adhésion" : `${borrowFee.toLocaleString('fr-FR')} FCFA`
+  const todayFmt  = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
   if (!book) return null
   const handleClose = () => { setVisible(false); setTimeout(onClose, 300) }
@@ -290,8 +303,13 @@ function BookDetailModal({ book, onClose }) {
               {reserveResult ? (
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
                   <p className="text-green-800 font-semibold text-sm">Réservation confirmée</p>
-                  <p className="text-green-600 text-xs">
-                    Expire le {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')} à {new Date(reserveResult.expiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  <p className="text-green-700 text-xs leading-relaxed">
+                    Votre demande a bien été enregistrée pour le {todayFmt}.<br/>
+                    Contribution : <span className="font-semibold">{feeLabel}</span>
+                    {!isAnnual && <span className="text-gray-400"> (à régler lors du retrait)</span>}
+                  </p>
+                  <p className="text-green-500 text-xs font-light">
+                    Réservation valable jusqu'au {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')} à {new Date(reserveResult.expiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                   {reserveResult.code && (
                     <>
@@ -334,7 +352,18 @@ function BookDetailModal({ book, onClose }) {
                 </div>
 
               ) : !showReserveForm ? (
-                /* Bouton principal — arrondi fluide */
+                {/* ── Bloc infos emprunt ── */}
+                <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500 font-light">Date de la demande</span>
+                    <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500 font-light">Contribution</span>
+                    <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
+                  </div>
+                </div>
+                {/* Bouton principal */}
                 <button onClick={() => setShowReserveForm(true)}
                   className="w-full py-3.5 bg-green-700 text-white rounded-2xl text-sm font-semibold tracking-wide hover:bg-green-800 active:scale-[.98] transition-all shadow-sm">
                   Réserver ce livre (48h)
