@@ -1,67 +1,160 @@
-import { BookOpen } from 'lucide-react'
+import { useState } from 'react'
 
-const CATEGORY_COLORS = {
-  'Théologie':             'bg-indigo-50 text-indigo-600',
-  'Croissance spirituelle':'bg-teal-50 text-teal-600',
-  'Biographies':           'bg-amber-50 text-amber-600',
-  'Romans chrétiens':      'bg-rose-50 text-rose-600',
-  'Évangélisation':        'bg-orange-50 text-orange-600',
-  'Leadership':            'bg-blue-50 text-blue-600',
-  'Famille et Mariage':    'bg-pink-50 text-pink-600',
-  'Deuil et Souffrance':   'bg-slate-100 text-slate-600',
-}
-
-function Placeholder({ title }) {
-  const initials = title?.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center
-                    bg-gradient-to-br from-green-700 to-green-900 select-none">
-      <span className="text-white text-3xl font-bold opacity-80">{initials}</span>
-      <BookOpen className="text-white opacity-20 w-8 h-8 mt-2" />
-    </div>
-  )
-}
-
+/**
+ * BookCard v4 — couverture 100% confinée via styles inline
+ * aspectRatio natif + overflow hidden sur le même élément
+ * Aucune dépendance à paddingTop trick
+ */
 function BookCard({ book, onClick }) {
-  const available    = book.available_copies > 0
-  // Supporte l'ancienne structure (book.category) et la nouvelle (book.categories.name)
-  const categoryName = book.categories?.name || book.category || null
-  const catStyle     = CATEGORY_COLORS[categoryName] || 'bg-gray-100 text-gray-500'
+  const [imgError, setImgError] = useState(false)
+  const available = book.available_copies > 0
+  const hasCover  = book.cover_url && !imgError
+  const initials  = book.title?.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
 
   return (
-    <div
-      onClick={() => onClick?.(book)}
-      className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100
-                 cursor-pointer transition-all duration-200
-                 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
-    >
-      <div className="aspect-[2/3] relative overflow-hidden bg-gray-100">
-        {book.cover_url
-          ? <img src={book.cover_url} alt={book.title} loading="lazy"
-                 className="w-full h-full object-cover" />
-          : <Placeholder title={book.title} />
-        }
-        <div className={`absolute top-2 right-2 flex items-center gap-1
-                         px-2 py-0.5 rounded-full text-xs font-semibold
-                         backdrop-blur-sm shadow-sm
-                         ${available ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'}`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-white" />
-          {available ? 'Disponible' : 'Indisponible'}
+    <button onClick={() => onClick(book)} className="group text-left w-full focus:outline-none">
+
+      {/* Carte — overflow hidden global */}
+      <div style={{
+        background:  '#ffffff',
+        border:      '1px solid #f3f4f6',
+        boxShadow:   '0 1px 3px rgba(0,0,0,0.08)',
+        overflow:    'hidden',
+        transition:  'box-shadow 0.3s, transform 0.3s',
+      }}
+        className="group-hover:shadow-lg group-hover:-translate-y-0.5"
+      >
+
+        {/* ── Couverture — aspectRatio natif, overflow hidden strict ── */}
+        <div style={{
+          width:       '100%',
+          aspectRatio: '2 / 3',
+          overflow:    'hidden',   /* clip natif, pas de padding trick */
+          position:    'relative',
+          background:  '#f9fafb',
+          display:     'block',
+        }}>
+
+          {hasCover ? (
+            <img
+              src={book.cover_url}
+              alt={book.title}
+              onError={() => setImgError(true)}
+              style={{
+                width:          '100%',
+                height:         '100%',
+                objectFit:      'cover',
+                objectPosition: 'center top',
+                display:        'block',
+                maxWidth:       '100%',
+                maxHeight:      '100%',  /* empêche tout débordement vertical */
+              }}
+            />
+          ) : (
+            /* Couverture de repli Navigateurs CI */
+            <div style={{
+              width:          '100%',
+              height:         '100%',
+              background:     'linear-gradient(145deg, #052e16 0%, #15803d 60%, #065f46 100%)',
+              display:        'flex',
+              flexDirection:  'column',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            '8px',
+            }}>
+              <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: '30px', fontWeight: 700, letterSpacing: '-0.5px' }}>
+                {initials}
+              </span>
+              <div style={{ width: '32px', height: '1px', background: 'rgba(255,255,255,0.2)' }} />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px', letterSpacing: '3px', textTransform: 'uppercase' }}>
+                Navigateurs CI
+              </span>
+            </div>
+          )}
+
+          {/* Badge disponibilité */}
+          <div style={{
+            position:       'absolute',
+            top:            '8px',
+            right:          '8px',
+            display:        'flex',
+            alignItems:     'center',
+            gap:            '5px',
+            background:     available ? 'rgba(255,255,255,0.88)' : 'rgba(243,244,246,0.92)',
+            backdropFilter: 'blur(4px)',
+            padding:        '3px 8px',
+            borderRadius:   '999px',
+            boxShadow:      '0 1px 3px rgba(0,0,0,0.1)',
+          }}>
+            {available ? (
+              <>
+                <span className="relative flex w-1.5 h-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                </span>
+                <span style={{ color: '#15803d', fontSize: '11px', fontWeight: 500, letterSpacing: '0.02em', lineHeight: 1 }}>
+                  Disponible
+                </span>
+              </>
+            ) : (
+              <span style={{ color: '#6b7280', fontSize: '11px', fontWeight: 500 }}>Indisponible</span>
+            )}
+          </div>
+
+          {/* Overlay indisponible */}
+          {!available && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.35)' }} />
+          )}
+        </div>
+
+        {/* ── Zone texte uniforme ── */}
+        <div style={{ padding: '12px', minHeight: '96px' }}>
+
+          {/* Titre 2 lignes max — inline styles pour line-clamp cross-browser */}
+          <h3 style={{
+            fontSize:           '14px',
+            fontWeight:         600,
+            color:              '#111827',
+            lineHeight:         1.4,
+            margin:             0,
+            display:            '-webkit-box',
+            WebkitLineClamp:    2,
+            WebkitBoxOrient:    'vertical',
+            overflow:           'hidden',
+          }}>
+            {book.title}
+          </h3>
+
+          {/* Auteur */}
+          <p style={{
+            fontSize:     '12px',
+            color:        '#9ca3af',
+            marginTop:    '4px',
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace:   'nowrap',
+          }}>
+            {book.author}
+          </p>
+
+          {/* Badge catégorie */}
+          {book.categories?.name && (
+            <span style={{
+              display:      'inline-block',
+              marginTop:    '8px',
+              background:   '#f0fdf4',
+              color:        '#15803d',
+              fontSize:     '11px',
+              padding:      '2px 10px',
+              borderRadius: '999px',
+              fontWeight:   500,
+            }}>
+              {book.categories.name}
+            </span>
+          )}
         </div>
       </div>
-
-      <div className="p-3">
-        <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">
-          {book.title}
-        </h3>
-        <p className="text-gray-400 text-xs mt-1 truncate">{book.author}</p>
-        {categoryName && (
-          <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium ${catStyle}`}>
-            {categoryName}
-          </span>
-        )}
-      </div>
-    </div>
+    </button>
   )
 }
 

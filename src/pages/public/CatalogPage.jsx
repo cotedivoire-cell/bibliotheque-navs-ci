@@ -1,190 +1,161 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, X, BookOpen, User } from 'lucide-react'
+import { Search, User } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import BookCard from '../../components/BookCard'
 import BookDetailModal from '../../components/BookDetailModal'
 
-const ALL = 'Tous'
-
-function SkeletonCard() {
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 animate-pulse">
-      <div className="aspect-[2/3] bg-gray-200" />
-      <div className="p-3 space-y-2">
-        <div className="h-3 bg-gray-200 rounded-full w-4/5" />
-        <div className="h-2 bg-gray-100 rounded-full w-3/5" />
-        <div className="h-4 bg-gray-100 rounded-full w-2/5 mt-1" />
-      </div>
-    </div>
-  )
-}
-
 function CatalogPage() {
-  const navigate     = useNavigate()
-  const [books,      setBooks]      = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [search,     setSearch]     = useState('')
-  const [category,   setCategory]   = useState(ALL)
-  const [session,    setSession]    = useState(null)
-  const [selected,   setSelected]   = useState(null) // livre sélectionné pour la modale
+  const navigate = useNavigate()
+  const [books,        setBooks]        = useState([])
+  const [categories,   setCategories]   = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [activecat,    setActiveCat]    = useState(null)
+  const [selectedBook, setSelectedBook] = useState(null)
+  const [user,         setUser]         = useState(null)
 
   useEffect(() => {
-    const load = async () => {
-      const [{ data: books }, { data: { session } }] = await Promise.all([
-        supabase
-          .from('books')
-          .select('*, categories(id, name)')
-          .eq('is_active', true)
-          .order('title'),
-        supabase.auth.getSession(),
-      ])
-      setBooks(books || [])
-      setSession(session)
-      setLoading(false)
-    }
-    load()
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
+    loadCatalog()
   }, [])
 
-  const categories = useMemo(() => {
-    const cats = [...new Set(
-      books.map(b => b.categories?.name).filter(Boolean)
-    )].sort()
-    return [ALL, ...cats]
-  }, [books])
+  const loadCatalog = async () => {
+    const [booksRes, catsRes] = await Promise.all([
+      supabase.from('books').select('*, categories(id, name)').eq('is_active', true).order('title'),
+      supabase.from('categories').select('*').order('name'),
+    ])
+    setBooks(booksRes.data || [])
+    setCategories(catsRes.data || [])
+    setLoading(false)
+  }
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return books.filter(book => {
-      const matchSearch = !q ||
-        book.title?.toLowerCase().includes(q) ||
-        book.author?.toLowerCase().includes(q)
-      const matchCat = category === ALL || book.categories?.name === category
-      return matchSearch && matchCat
-    })
-  }, [books, search, category])
+  const filtered = books.filter(b => {
+    const matchSearch = !search || b.title?.toLowerCase().includes(search.toLowerCase()) || b.author?.toLowerCase().includes(search.toLowerCase())
+    const matchCat    = !activecat || b.category_id === activecat
+    return matchSearch && matchCat
+  })
 
-  const available = filtered.filter(b => b.available_copies > 0).length
+  const availableCount = filtered.filter(b => b.available_copies > 0).length
 
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* En-tête */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-green-700 rounded-lg flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-white" />
+      {/* ── Navbar — arrondis conservés ── */}
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+
+          {/* Logo arrondi */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-8 h-8 bg-green-700 rounded-xl flex items-center justify-center">
+              <span className="text-white text-xs font-bold">B</span>
             </div>
-            <div>
-              <h1 className="text-base font-bold text-gray-900 leading-tight">
-                Bibliothèque-navs CI
-              </h1>
-              <p className="text-xs text-gray-400 leading-tight">
-                Les Navigateurs — Côte d'Ivoire
-              </p>
+            <span className="text-sm font-semibold text-gray-900 hidden sm:block tracking-tight">
+              Bibliothèque-navs CI
+            </span>
+          </div>
+
+          {/* Barre de recherche arrondie */}
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Titre, auteur..."
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 bg-gray-50 transition-colors"
+              />
             </div>
           </div>
+
+          {/* Bouton connexion arrondi */}
           <button
-            onClick={() => navigate(session ? '/profile' : '/login')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border
-                       border-gray-200 text-xs font-medium text-gray-600
-                       hover:bg-gray-50 transition-colors"
+            onClick={() => navigate(user ? '/profile' : '/login')}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-green-700 transition-colors flex-shrink-0 px-3 py-2 rounded-xl hover:bg-gray-50"
           >
-            <User className="w-3.5 h-3.5" />
-            {session ? 'Mon espace' : 'Connexion'}
+            <User className="w-4 h-4" />
+            <span className="hidden sm:block">{user ? 'Mon espace' : 'Connexion'}</span>
           </button>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4">
+      <main className="max-w-5xl mx-auto px-4 py-8">
 
-        {/* Recherche */}
-        <div className="pt-5 pb-3">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4
-                               text-gray-400 pointer-events-none" />
-            <input
-              type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Titre, auteur..."
-              className="w-full bg-white border border-gray-200 rounded-2xl
-                         pl-11 pr-10 py-3.5 text-sm placeholder:text-gray-400
-                         focus:outline-none focus:ring-2 focus:ring-green-500
-                         focus:border-transparent shadow-sm" />
-            {search && (
-              <button onClick={() => setSearch('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2
-                           text-gray-400 hover:text-gray-600 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+        {/* ── En-tête accueillante ── */}
+        {!loading && (
+          <p className="text-gray-400 font-light tracking-wide text-sm mb-6">
+            Découvrez notre sélection —{' '}
+            <span className="text-green-700 font-medium">
+              {availableCount} ouvrage{availableCount > 1 ? 's' : ''} disponible{availableCount > 1 ? 's' : ''}
+            </span>
+            {filtered.length !== availableCount && (
+              <span className="text-gray-300"> sur {filtered.length}</span>
             )}
-          </div>
-        </div>
+          </p>
+        )}
 
-        {/* Filtres catégorie */}
-        <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
+        {/* ── Filtres — arrondis conservés ── */}
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-8 no-scrollbar">
+          <button
+            onClick={() => setActiveCat(null)}
+            className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
+              !activecat
+                ? 'bg-green-700 text-white shadow-sm'
+                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            Tous
+          </button>
           {categories.map(cat => (
-            <button key={cat} onClick={() => setCategory(cat)}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold
-                          transition-all duration-150 ${
-                category === cat
+            <button
+              key={cat.id}
+              onClick={() => setActiveCat(cat.id === activecat ? null : cat.id)}
+              className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
+                activecat === cat.id
                   ? 'bg-green-700 text-white shadow-sm'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-green-300'
-              }`}>
-              {cat}
+                  : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {cat.name}
             </button>
           ))}
         </div>
 
-        {/* Compteur */}
-        {!loading && (
-          <p className="text-xs text-gray-400 mb-4">
-            {filtered.length} livre(s) —{' '}
-            <span className="text-green-600 font-medium">{available} disponible(s)</span>
-          </p>
-        )}
-
-        {/* Grille */}
+        {/* ── Grille ── */}
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-10">
-            {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="animate-pulse">
+                <div className="w-full bg-gray-200" style={{ paddingTop: '150%' }} />
+                <div className="p-3 space-y-2">
+                  <div className="h-3 bg-gray-200 rounded w-3/4" />
+                  <div className="h-3 bg-gray-200 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
-              <BookOpen className="w-7 h-7 text-gray-300" />
-            </div>
-            <p className="font-semibold text-gray-700">Aucun livre trouvé</p>
-            <p className="text-sm text-gray-400 mt-1">
-              {search ? 'Essayez une autre recherche'
-                      : "La bibliothèque est vide pour l'instant"}
-            </p>
-            {search && (
-              <button onClick={() => setSearch('')}
-                className="mt-4 text-green-700 text-sm font-medium">
-                Effacer la recherche
+          <div className="text-center py-24">
+            <p className="text-gray-300 text-5xl mb-4">📚</p>
+            <p className="text-gray-400 font-light">Aucun ouvrage trouvé</p>
+            {(search || activecat) && (
+              <button onClick={() => { setSearch(''); setActiveCat(null) }} className="mt-4 text-green-700 text-sm hover:underline">
+                Effacer les filtres
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {filtered.map(book => (
-              <BookCard
-                key={book.id}
-                book={book}
-                onClick={setSelected}   // ← ouvre la modale au clic
-              />
+              <BookCard key={book.id} book={book} onClick={setSelectedBook} />
             ))}
           </div>
         )}
-      </div>
+      </main>
 
-      {/* ── Modale détail livre ── */}
-      {selected && (
-        <BookDetailModal
-          book={selected}
-          onClose={() => setSelected(null)}
-        />
+      {selectedBook && (
+        <BookDetailModal book={selectedBook} onClose={() => setSelectedBook(null)} />
       )}
     </div>
   )
