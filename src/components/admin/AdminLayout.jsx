@@ -4,12 +4,13 @@ import OfflineBanner from '../OfflineBanner'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 
 const navItems = [
-  { path: '/admin',              label: 'Dashboard'    },
-  { path: '/admin/livres',       label: 'Livres'       },
-  { path: '/admin/membres',      label: 'Membres'      },
-  { path: '/admin/emprunts',     label: 'Emprunts'     },
-  { path: '/admin/finances',     label: 'Finances'     },
-  { path: '/admin/suggestions',  label: 'Suggestions'  },
+  { path: '/admin',                label: 'Dashboard'     },
+  { path: '/admin/livres',         label: 'Livres'        },
+  { path: '/admin/membres',        label: 'Membres'       },
+  { path: '/admin/emprunts',       label: 'Emprunts'      },
+  { path: '/admin/reservations',   label: 'Réservations'  },
+  { path: '/admin/finances',       label: 'Finances'      },
+  { path: '/admin/suggestions',    label: 'Suggestions'   },
 ]
 
 function AdminLayout({ children }) {
@@ -17,10 +18,7 @@ function AdminLayout({ children }) {
   const navigate = useNavigate()
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus()
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate('/login')
-  }
+  const handleLogout = async () => { await supabase.auth.signOut(); navigate('/login') }
 
   return (
     <div className="min-h-screen bg-slate-50">

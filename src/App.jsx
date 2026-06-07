@@ -2,16 +2,17 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
-import CatalogPage      from './pages/public/CatalogPage'
-import LoginPage        from './pages/public/LoginPage'
-import RegisterPage     from './pages/public/RegisterPage'
-import ProfilePage      from './pages/public/ProfilePage'
-import DashboardPage    from './pages/admin/DashboardPage'
-import BooksPage        from './pages/admin/BooksPage'
-import MembersPage      from './pages/admin/MembersPage'
-import BorrowingsPage   from './pages/admin/BorrowingsPage'
-import FinancePage      from './pages/admin/FinancePage'
-import SuggestionsPage  from './pages/admin/SuggestionsPage'
+import CatalogPage             from './pages/public/CatalogPage'
+import LoginPage               from './pages/public/LoginPage'
+import RegisterPage            from './pages/public/RegisterPage'
+import ProfilePage             from './pages/public/ProfilePage'
+import DashboardPage           from './pages/admin/DashboardPage'
+import BooksPage               from './pages/admin/BooksPage'
+import MembersPage             from './pages/admin/MembersPage'
+import BorrowingsPage          from './pages/admin/BorrowingsPage'
+import AdminReservationsPage   from './pages/admin/AdminReservationsPage'
+import FinancePage             from './pages/admin/FinancePage'
+import SuggestionsPage         from './pages/admin/SuggestionsPage'
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -51,12 +52,13 @@ function App() {
         <Route path="/login"    element={<LoginPage />}    />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile"  element={<MemberRoute><ProfilePage /></MemberRoute>} />
-        <Route path="/admin"             element={<AdminRoute><DashboardPage /></AdminRoute>} />
-        <Route path="/admin/livres"      element={<AdminRoute><BooksPage /></AdminRoute>} />
-        <Route path="/admin/membres"     element={<AdminRoute><MembersPage /></AdminRoute>} />
-        <Route path="/admin/emprunts"    element={<AdminRoute><BorrowingsPage /></AdminRoute>} />
-        <Route path="/admin/finances"    element={<AdminRoute><FinancePage /></AdminRoute>} />
-        <Route path="/admin/suggestions" element={<AdminRoute><SuggestionsPage /></AdminRoute>} />
+        <Route path="/admin"               element={<AdminRoute><DashboardPage /></AdminRoute>} />
+        <Route path="/admin/livres"        element={<AdminRoute><BooksPage /></AdminRoute>} />
+        <Route path="/admin/membres"       element={<AdminRoute><MembersPage /></AdminRoute>} />
+        <Route path="/admin/emprunts"      element={<AdminRoute><BorrowingsPage /></AdminRoute>} />
+        <Route path="/admin/reservations"  element={<AdminRoute><AdminReservationsPage /></AdminRoute>} />
+        <Route path="/admin/finances"      element={<AdminRoute><FinancePage /></AdminRoute>} />
+        <Route path="/admin/suggestions"   element={<AdminRoute><SuggestionsPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
