@@ -305,7 +305,7 @@ function BookDetailModal({ book, onClose }) {
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
                   <p className="text-green-800 font-semibold text-sm">Réservation confirmée</p>
                   <p className="text-green-800 text-xs leading-relaxed font-medium">
-                    Demande enregistrée ! Votre livre vous attend au bureau.
+                    Demande enregistrée ! Durée du prêt : {borrowDuration} jours. Frais d'emprunt : {feeLabel}.
                   </p>
                   <div className="bg-white border border-green-200 rounded-xl p-3 space-y-1.5 mt-1">
                     <div className="flex justify-between">
@@ -313,7 +313,7 @@ function BookDetailModal({ book, onClose }) {
                       <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-xs text-gray-500">Contribution</span>
+                      <span className="text-xs text-gray-500">Frais d'emprunt</span>
                       <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
                     </div>
                     <div className="flex justify-between">
@@ -376,7 +376,7 @@ function BookDetailModal({ book, onClose }) {
                       <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500 font-light">Contribution</span>
+                      <span className="text-xs text-gray-500 font-light">Frais d'emprunt</span>
                       <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
                     </div>
                   </div>
