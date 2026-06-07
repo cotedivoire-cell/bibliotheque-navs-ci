@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, User } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import BookCard from '../../components/BookCard'
 import BookDetailModal from '../../components/BookDetailModal'
@@ -41,68 +40,48 @@ function CatalogPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ── Navbar — arrondis conservés ── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-
-          {/* Logo arrondi */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-8 h-8 bg-green-700 rounded-xl flex items-center justify-center">
-              <span className="text-white text-xs font-bold">B</span>
+      {/* ── En-tête original — structure NON modifiée ── */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
+        {/* Ligne 1 : Logo + Titre + Mon espace */}
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center">
+              <span className="text-white text-lg">📖</span>
             </div>
-            <span className="text-sm font-semibold text-gray-900 hidden sm:block tracking-tight">
-              Bibliothèque-navs CI
-            </span>
-          </div>
-
-          {/* Barre de recherche arrondie */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Titre, auteur..."
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 bg-gray-50 transition-colors"
-              />
+            <div>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Bibliothèque-navs CI</p>
+              <p className="text-xs text-gray-400 leading-tight">Les Navigateurs — Côte d'Ivoire</p>
             </div>
           </div>
-
-          {/* Bouton connexion arrondi */}
           <button
             onClick={() => navigate(user ? '/profile' : '/login')}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-green-700 transition-colors flex-shrink-0 px-3 py-2 rounded-xl hover:bg-gray-50"
+            className="flex items-center gap-2 border border-gray-200 rounded-xl px-4 py-2 text-sm text-gray-600 hover:border-green-400 hover:text-green-700 transition-colors bg-white"
           >
-            <User className="w-4 h-4" />
-            <span className="hidden sm:block">{user ? 'Mon espace' : 'Connexion'}</span>
+            <span>👤</span>
+            <span>{user ? 'Mon espace' : 'Connexion'}</span>
           </button>
         </div>
-      </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* Ligne 2 : Barre de recherche */}
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Titre, auteur..."
+              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-green-400 bg-gray-50"
+            />
+          </div>
+        </div>
 
-        {/* ── En-tête accueillante ── */}
-        {!loading && (
-          <p className="text-gray-400 font-light tracking-wide text-sm mb-6">
-            Découvrez notre sélection —{' '}
-            <span className="text-green-700 font-medium">
-              {availableCount} ouvrage{availableCount > 1 ? 's' : ''} disponible{availableCount > 1 ? 's' : ''}
-            </span>
-            {filtered.length !== availableCount && (
-              <span className="text-gray-300"> sur {filtered.length}</span>
-            )}
-          </p>
-        )}
-
-        {/* ── Filtres — arrondis conservés ── */}
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-8 no-scrollbar">
+        {/* Ligne 3 : Filtres catégories — arrondis conservés */}
+        <div className="flex gap-2 overflow-x-auto px-4 pb-3 no-scrollbar">
           <button
             onClick={() => setActiveCat(null)}
             className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
-              !activecat
-                ? 'bg-green-700 text-white shadow-sm'
-                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+              !activecat ? 'bg-green-700 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
             }`}
           >
             Tous
@@ -112,22 +91,34 @@ function CatalogPage() {
               key={cat.id}
               onClick={() => setActiveCat(cat.id === activecat ? null : cat.id)}
               className={`flex-shrink-0 px-4 py-1.5 text-xs font-medium rounded-full transition-all ${
-                activecat === cat.id
-                  ? 'bg-green-700 text-white shadow-sm'
-                  : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                activecat === cat.id ? 'bg-green-700 text-white shadow-sm' : 'bg-white text-gray-500 border border-gray-200'
               }`}
             >
               {cat.name}
             </button>
           ))}
         </div>
+      </div>
 
-        {/* ── Grille ── */}
+      {/* ── Contenu ── */}
+      <div className="px-4 pt-4 pb-8">
+
+        {/* Compteur — aligné à gauche, style élégant */}
+        {!loading && (
+          <p className="text-sm mb-4">
+            <span className="text-gray-400 font-light">Découvrez notre sélection — </span>
+            <span className="text-green-700 font-medium">
+              {availableCount} ouvrage{availableCount > 1 ? 's' : ''} disponible{availableCount > 1 ? 's' : ''}
+            </span>
+          </p>
+        )}
+
+        {/* Grille */}
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="animate-pulse">
-                <div className="w-full bg-gray-200" style={{ paddingTop: '150%' }} />
+                <div className="w-full bg-gray-200" style={{ aspectRatio: '2/3' }} />
                 <div className="p-3 space-y-2">
                   <div className="h-3 bg-gray-200 rounded w-3/4" />
                   <div className="h-3 bg-gray-200 rounded w-1/2" />
@@ -136,23 +127,23 @@ function CatalogPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-24">
-            <p className="text-gray-300 text-5xl mb-4">📚</p>
-            <p className="text-gray-400 font-light">Aucun ouvrage trouvé</p>
+          <div className="text-center py-20">
+            <p className="text-gray-300 text-4xl mb-3">📚</p>
+            <p className="text-gray-400 text-sm">Aucun ouvrage trouvé</p>
             {(search || activecat) && (
-              <button onClick={() => { setSearch(''); setActiveCat(null) }} className="mt-4 text-green-700 text-sm hover:underline">
+              <button onClick={() => { setSearch(''); setActiveCat(null) }} className="mt-3 text-green-700 text-sm hover:underline">
                 Effacer les filtres
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {filtered.map(book => (
               <BookCard key={book.id} book={book} onClick={setSelectedBook} />
             ))}
           </div>
         )}
-      </main>
+      </div>
 
       {selectedBook && (
         <BookDetailModal book={selectedBook} onClose={() => setSelectedBook(null)} />
