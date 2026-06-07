@@ -233,13 +233,13 @@ function BookDetailModal({ book, onClose }) {
 
           {/* ── Titre, auteur, badges ── */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 leading-snug">{book.title}</h2>
-            <p className="text-gray-400 text-sm mt-1 font-light">{book.author}</p>
+            <h2 className="text-lg font-semibold text-gray-900 leading-snug">{book.title}</h2>
+            <p className="text-gray-400 text-sm mt-1 font-light capitalize">{book.author}</p>
 
             {/* Badges harmonisés */}
             <div className="flex flex-wrap gap-2 mt-3">
               <span className={`rounded-full border text-xs px-3 py-1 ${stockOk ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-400'}`}>
-                {stockOk ? `${realStock ?? book.available_copies} ex. disponible` : 'Indisponible'}
+                {stockOk ? `${realStock ?? book.available_copies} dispo.` : 'Indisponible'}
               </span>
               {book.categories?.name && (
                 <span className="rounded-full border border-gray-200 text-gray-500 text-xs px-3 py-1">
@@ -425,7 +425,7 @@ function BookDetailModal({ book, onClose }) {
               Avis {reviews.length > 0 && <span className="text-gray-300 font-normal">({reviews.length})</span>}
             </h3>
             {reviews.length === 0 ? (
-              <p className="text-gray-400 text-xs">Aucun avis pour l'instant.</p>
+              <p className="text-gray-300 font-light italic text-xs">Aucun avis pour l'instant.</p>
             ) : (
               <div className="space-y-3">
                 {reviews.map(rv => (
@@ -482,7 +482,7 @@ function BookDetailModal({ book, onClose }) {
                   <div key={rec.id} className="text-center">
                     <div className="w-full aspect-[2/3] bg-gray-100 overflow-hidden mb-1">
                       {rec.cover_url
-                        ? <img src={rec.cover_url} alt={rec.title} className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
+                        ? <img src={rec.cover_url} alt={rec.title} className="w-full h-full object-cover shadow-[4px_4px_12px_rgba(0,0,0,0.10)]" style={{ borderRadius: 0 }} />
                         : <div className="w-full h-full bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center">
                             <span className="text-white/70 text-sm font-bold">{rec.title?.slice(0,1)}</span>
                           </div>
