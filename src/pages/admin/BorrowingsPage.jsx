@@ -1,15 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   AlertTriangle, CheckCircle, Clock, Pencil,
-  Trash2, X, Check, ScanLine, RotateCcw, Loader, WifiOff
+  Trash2, X, Check, ScanLine, RotateCcw, Loader, WifiOff, Users
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import {
-  cacheBooks, getCachedBooks,
-  cacheMembers, getCachedMembers,
-  cacheBorrowings, getCachedBorrowings,
-  putCachedBorrowing, updateCachedBorrowing, updateCachedBook,
-  enqueue,
+  cacheBooks, getCachedBooks, cacheMembers, getCachedMembers,
+  cacheBorrowings, getCachedBorrowings, putCachedBorrowing,
+  updateCachedBorrowing, updateCachedBook, enqueue,
 } from '../../lib/offlineQueue'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -26,7 +24,7 @@ const STATUS = {
 
 const EMPTY_FORM = {
   member_id: '', book_id: '', loan_type: 'location',
-  amount_paid: 0, borrowed_at: TODAY, due_date: '',
+  amount_paid: 0, borrowed_at: TODAY, due_date: '', borrowee_name: '',
 }
 
 function BorrowingsPage() {
@@ -48,6 +46,7 @@ function BorrowingsPage() {
   const [scanMsg,       setScanMsg]       = useState('')
   const [scanSuccess,   setScanSuccess]   = useState(false)
   const [scanLoading,   setScanLoading]   = useState(false)
+  const [groupActiveCount, setGroupActiveCount] = useState(0)
 
   const scanModeRef = useRef(null)
 
@@ -57,62 +56,49 @@ function BorrowingsPage() {
     setLoading(true)
     try {
       if (isOnline) {
-        await supabase.from('borrowings').update({ status: 'en_retard' })
-          .eq('status', 'en_cours').lt('due_date', TODAY)
-
+        await supabase.from('borrowings').update({ status: 'en_retard' }).eq('status', 'en_cours').lt('due_date', TODAY)
         const [bRes, mRes, bookRes] = await Promise.all([
-          supabase.from('borrowings')
-            .select('*, books(id, title, cover_url, available_copies), profiles(full_name, membership_type)')
-            .order('created_at', { ascending: false }),
-          supabase.from('profiles').select('id, full_name, membership_type').order('full_name'),
+          supabase.from('borrowings').select('*, books(id, title, cover_url, available_copies), profiles(full_name, membership_type, account_type, max_borrowings)').order('created_at', { ascending: false }),
+          supabase.from('profiles').select('id, full_name, membership_type, account_type, max_borrowings').order('full_name'),
           supabase.from('books').select('id, title, available_copies, isbn, cover_url').eq('is_active', true).order('title'),
         ])
-
         const bData = bRes.data || []
         const mData = mRes.data || []
         const bookData = bookRes.data || []
-
         setBorrowings(bData)
         setMembers(mData)
         setBooks(bookData.filter(b => b.available_copies > 0))
-
         await Promise.all([
-          cacheBorrowings(bData.map(b => ({
-            ...b,
-            _book_title:  b.books?.title,
-            _book_cover:  b.books?.cover_url,
-            _member_name: b.profiles?.full_name,
-            _member_type: b.profiles?.membership_type,
-          }))),
+          cacheBorrowings(bData.map(b => ({ ...b, _book_title: b.books?.title, _book_cover: b.books?.cover_url, _member_name: b.profiles?.full_name, _member_type: b.profiles?.membership_type }))),
           cacheMembers(mData),
           cacheBooks(bookData),
         ])
       } else {
-        const [cachedB, cachedM, cachedBooks] = await Promise.all([
-          getCachedBorrowings(),
-          getCachedMembers(),
-          getCachedBooks(),
-        ])
-        setBorrowings(cachedB.map(b => ({
-          ...b,
-          books:    { title: b._book_title, cover_url: b._book_cover },
-          profiles: { full_name: b._member_name, membership_type: b._member_type },
-        })))
+        const [cachedB, cachedM, cachedBooks] = await Promise.all([getCachedBorrowings(), getCachedMembers(), getCachedBooks()])
+        setBorrowings(cachedB.map(b => ({ ...b, books: { title: b._book_title, cover_url: b._book_cover }, profiles: { full_name: b._member_name, membership_type: b._member_type } })))
         setMembers(cachedM)
         setBooks(cachedBooks.filter(b => b.available_copies > 0 && b.is_active))
       }
-    } catch (err) {
-      console.error('Erreur chargement:', err)
-    }
+    } catch (err) { console.error(err) }
     setLoading(false)
   }
 
-  const startScan = (mode) => {
-    scanModeRef.current = mode
-    setScanMode(mode)
-    setScanMsg('')
-    setScanSuccess(false)
-  }
+  // ── Membre sélectionné ──
+  const selectedMember  = members.find(m => m.id === form.member_id)
+  const memberIsAnnual  = selectedMember?.membership_type === 'annual'
+  const memberIsGroup   = selectedMember?.account_type === 'group'
+  const memberMaxBorrow = selectedMember?.max_borrowings || 1
+
+  // Calculer emprunts actifs du membre sélectionné
+  useEffect(() => {
+    if (!form.member_id) { setGroupActiveCount(0); return }
+    const active = borrowings.filter(b =>
+      b.member_id === form.member_id && ['en_cours', 'en_retard'].includes(b.status)
+    ).length
+    setGroupActiveCount(active)
+  }, [form.member_id, borrowings])
+
+  const startScan = (mode) => { scanModeRef.current = mode; setScanMode(mode); setScanMsg(''); setScanSuccess(false) }
 
   const findBook = async (code) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -128,75 +114,40 @@ function BorrowingsPage() {
 
   const handleScanResult = async (code) => {
     const mode = scanModeRef.current
-    setScanMode(null)
-    scanModeRef.current = null
-    setScanLoading(true)
-    setScanMsg('')
-    setScanSuccess(false)
-
+    setScanMode(null); scanModeRef.current = null
+    setScanLoading(true); setScanMsg(''); setScanSuccess(false)
     try {
       const book = await findBook(code)
-      if (!book) {
-        setScanMsg("Aucun livre trouvé. Vérifiez que l'ISBN est renseigné dans la fiche.")
-        setScanLoading(false)
-        return
-      }
-
+      if (!book) { setScanMsg("Aucun livre trouvé. Vérifiez que l'ISBN est renseigné."); setScanLoading(false); return }
       if (mode === 'borrow') {
-        if (book.available_copies <= 0) {
-          setScanMsg(`"${book.title}" n'est pas disponible.`)
-          setScanLoading(false)
-          return
-        }
+        if (book.available_copies <= 0) { setScanMsg(`"${book.title}" n'est pas disponible.`); setScanLoading(false); return }
         setForm(p => ({ ...p, book_id: book.id }))
-        setShowForm(true)
-        setScanSuccess(true)
+        setShowForm(true); setScanSuccess(true)
         setScanMsg(`Livre détecté : "${book.title}" — complétez le formulaire.`)
       } else if (mode === 'return') {
         let activeBorrow = null
         if (isOnline) {
-          const { data } = await supabase.from('borrowings').select('*, profiles(full_name)')
-            .eq('book_id', book.id).in('status', ['en_cours', 'en_retard'])
-            .order('borrowed_at', { ascending: true }).limit(1).maybeSingle()
+          const { data } = await supabase.from('borrowings').select('*, profiles(full_name)').eq('book_id', book.id).in('status', ['en_cours', 'en_retard']).order('borrowed_at', { ascending: true }).limit(1).maybeSingle()
           activeBorrow = data
         } else {
           const cached = await getCachedBorrowings()
           activeBorrow = cached.find(b => b.book_id === book.id && ['en_cours', 'en_retard', 'offline'].includes(b.status))
         }
-        if (!activeBorrow) {
-          setScanMsg(`"${book.title}" n'a aucun emprunt actif.`)
-          setScanLoading(false)
-          return
-        }
+        if (!activeBorrow) { setScanMsg(`"${book.title}" n'a aucun emprunt actif.`); setScanLoading(false); return }
         await processReturn(activeBorrow, book)
         setScanSuccess(true)
         setScanMsg(`Retour validé — "${book.title}" par ${activeBorrow.profiles?.full_name || activeBorrow._member_name}.`)
       }
-    } catch {
-      setScanMsg('Erreur. Réessayez.')
-    }
+    } catch { setScanMsg('Erreur. Réessayez.') }
     setScanLoading(false)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setSaving(true)
-    setError('')
-
-    const borrowingData = {
-      member_id:   form.member_id,
-      book_id:     form.book_id,
-      loan_type:   form.loan_type,
-      amount_paid: form.loan_type === 'abonnement' ? 0 : parseInt(form.amount_paid) || 0,
-      borrowed_at: form.borrowed_at,
-      due_date:    form.due_date,
-      status:      'en_cours',
-      created_at:  new Date().toISOString(),
-    }
-
+    setSaving(true); setError('')
+    const borrowingData = { member_id: form.member_id, book_id: form.book_id, loan_type: form.loan_type, amount_paid: form.loan_type === 'abonnement' ? 0 : parseInt(form.amount_paid) || 0, borrowed_at: form.borrowed_at, due_date: form.due_date, status: 'en_cours', created_at: new Date().toISOString(), borrowee_name: form.borrowee_name.trim() || null }
     const selectedBook = books.find(b => b.id === form.book_id)
     const newAvail = (selectedBook?.available_copies || 1) - 1
-
     try {
       if (isOnline) {
         const { error: insertError } = await supabase.from('borrowings').insert([borrowingData])
@@ -204,19 +155,20 @@ function BorrowingsPage() {
         await supabase.from('books').update({ available_copies: newAvail }).eq('id', form.book_id)
       } else {
         const localId = `offline_${Date.now()}`
-        const member  = members.find(m => m.id === form.member_id)
+        const member = members.find(m => m.id === form.member_id)
         await enqueue({ type: 'CREATE_BORROWING', data: { borrowingData: { ...borrowingData, id: localId }, bookId: form.book_id, newAvailableCopies: newAvail } })
         await putCachedBorrowing({ ...borrowingData, id: localId, status: 'offline', _book_title: selectedBook?.title, _book_cover: selectedBook?.cover_url, _member_name: member?.full_name, _member_type: member?.membership_type })
         await updateCachedBook(form.book_id, { available_copies: newAvail })
         await refreshPending()
       }
-      setForm(EMPTY_FORM)
-      setShowForm(false)
-      setScanMsg('')
-      loadAll()
-    } catch {
-      setError("Erreur lors de la création. Réessayez.")
-    }
+      // Si compte groupe → garder le formulaire ouvert avec le même membre, changer seulement le livre
+      if (memberIsGroup) {
+        setForm(p => ({ ...p, book_id: '', borrowee_name: '' }))
+      } else {
+        setForm(EMPTY_FORM); setShowForm(false)
+      }
+      setScanMsg(''); loadAll()
+    } catch { setError("Erreur lors de la création. Réessayez.") }
     setSaving(false)
   }
 
@@ -236,14 +188,12 @@ function BorrowingsPage() {
     loadAll()
   }
 
-  const handleReturn = (borrowing) => processReturn(borrowing)
-
-  const handleSaveDate = async (id) => {
+  const handleReturn    = (b) => processReturn(b)
+  const handleSaveDate  = async (id) => {
     if (!newDueDate) return
     await supabase.from('borrowings').update({ due_date: newDueDate, status: newDueDate >= TODAY ? 'en_cours' : 'en_retard' }).eq('id', id)
     setEditingDate(null); setNewDueDate(''); loadAll()
   }
-
   const handleDelete = async (borrowing) => {
     setDeleting(borrowing.id)
     if (borrowing.status !== 'retourné') {
@@ -254,9 +204,7 @@ function BorrowingsPage() {
     setConfirmDelete(null); setDeleting(null); loadAll()
   }
 
-  const selectedMember = members.find(m => m.id === form.member_id)
-  const memberIsAnnual = selectedMember?.membership_type === 'annual'
-  const activeCount    = borrowings.filter(b => ['en_cours', 'en_retard', 'offline'].includes(b.status)).length
+  const activeCount = borrowings.filter(b => ['en_cours', 'en_retard', 'offline'].includes(b.status)).length
 
   return (
     <AdminLayout>
@@ -279,17 +227,48 @@ function BorrowingsPage() {
 
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8">
-          <h2 className="text-base font-semibold text-slate-800 mb-6">{form.book_id ? "Finaliser l'emprunt" : 'Nouvel emprunt'}{!isOnline && <span className="ml-2 text-xs text-amber-600">(sync différée)</span>}</h2>
+          <h2 className="text-base font-semibold text-slate-800 mb-6">
+            {memberIsGroup ? `Emprunt de groupe — ${groupActiveCount}/${memberMaxBorrow} livres actifs` : form.book_id ? "Finaliser l'emprunt" : 'Nouvel emprunt'}
+            {!isOnline && <span className="ml-2 text-xs text-amber-600">(sync différée)</span>}
+          </h2>
           {error && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">{error}</div>}
+
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Membre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Membre *</label>
-              <select required value={form.member_id} onChange={e => setForm(p => ({ ...p, member_id: e.target.value }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
+              <select required value={form.member_id} onChange={e => setForm(p => ({ ...p, member_id: e.target.value, borrowee_name: '' }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">Sélectionner un membre</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.account_type === 'group' ? '👥 ' : ''}{m.full_name}
+                  </option>
+                ))}
               </select>
-              {selectedMember && <div className={`mt-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 ${memberIsAnnual ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}><span className={`w-2 h-2 rounded-full ${memberIsAnnual ? 'bg-amber-500' : 'bg-slate-400'}`} />{memberIsAnnual ? 'Abonnement annuel — pas de frais' : "À l'unité — location payante"}</div>}
+
+              {/* Badge adhésion */}
+              {selectedMember && (
+                <div className={`mt-2 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 ${memberIsAnnual ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+                  <span className={`w-2 h-2 rounded-full ${memberIsAnnual ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                  {memberIsAnnual ? 'Abonnement annuel — pas de frais' : "À l'unité — location payante"}
+                </div>
+              )}
+
+              {/* Badge compte groupe */}
+              {memberIsGroup && (
+                <div className="mt-2 px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5" />
+                    Compte Groupe — Quota Élargi
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${groupActiveCount >= memberMaxBorrow ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {groupActiveCount}/{memberMaxBorrow} livres actifs
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* Livre */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Livre *</label>
               <select required value={form.book_id} onChange={e => setForm(p => ({ ...p, book_id: e.target.value }))} className={`w-full border px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 ${form.book_id ? 'border-green-400' : 'border-slate-200'}`}>
@@ -297,6 +276,21 @@ function BorrowingsPage() {
                 {books.map(b => <option key={b.id} value={b.id}>{b.title} — {b.available_copies} dispo.</option>)}
               </select>
             </div>
+
+            {/* Destinataire (compte groupe uniquement) */}
+            {memberIsGroup && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Destinataire <span className="text-slate-400 font-normal">(membre du groupe qui reçoit ce livre)</span>
+                </label>
+                <input type="text" value={form.borrowee_name}
+                  onChange={e => setForm(p => ({ ...p, borrowee_name: e.target.value }))}
+                  placeholder="Nom du membre du groupe (optionnel)"
+                  className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+            )}
+
+            {/* Type emprunt */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Type d'emprunt *</label>
               <div className="flex gap-3">
@@ -305,16 +299,28 @@ function BorrowingsPage() {
                 ))}
               </div>
             </div>
-            {form.loan_type === 'location' && <div><label className="block text-sm font-medium text-slate-700 mb-1">Montant payé (FCFA)</label><input type="number" min="0" value={form.amount_paid} onChange={e => setForm(p => ({ ...p, amount_paid: e.target.value }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>}
+
+            {form.loan_type === 'location' && (
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Montant payé (FCFA)</label><input type="number" min="0" value={form.amount_paid} onChange={e => setForm(p => ({ ...p, amount_paid: e.target.value }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
+            )}
+
             <div className="grid grid-cols-2 gap-5">
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Date d'emprunt *</label><input type="date" required value={form.borrowed_at} onChange={e => setForm(p => ({ ...p, borrowed_at: e.target.value }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Date limite *</label><input type="date" required value={form.due_date} min={form.borrowed_at} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} className="w-full border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /></div>
             </div>
-            <button type="submit" disabled={saving} className="w-full bg-green-700 text-white py-3 text-sm font-semibold hover:bg-green-800 transition-all disabled:opacity-50">{saving ? 'Enregistrement...' : isOnline ? "Créer l'emprunt" : "Créer l'emprunt (sync différée)"}</button>
+
+            <button type="submit" disabled={saving} className="w-full bg-green-700 text-white py-3 text-sm font-semibold hover:bg-green-800 transition-all disabled:opacity-50">
+              {saving ? 'Enregistrement...' : memberIsGroup ? `Enregistrer ce livre du groupe (${groupActiveCount + 1}/${memberMaxBorrow})` : isOnline ? "Créer l'emprunt" : "Créer l'emprunt (sync différée)"}
+            </button>
+
+            {memberIsGroup && (
+              <p className="text-xs text-blue-600 text-center">Le formulaire reste ouvert pour ajouter un autre livre au même groupe.</p>
+            )}
           </form>
         </div>
       )}
 
+      {/* Liste */}
       {loading ? <p className="text-slate-400 text-sm">Chargement...</p> : borrowings.length === 0 ? <div className="text-center py-20 text-slate-400"><p className="font-medium">Aucun emprunt</p></div> : (
         <div className="space-y-3">
           {borrowings.map(b => {
@@ -322,13 +328,21 @@ function BorrowingsPage() {
             const StatusIcon = cfg.Icon
             const isActive = ['en_cours', 'en_retard', 'offline'].includes(b.status)
             const isOffline = b.status === 'offline'
+            const isGroup = b.profiles?.account_type === 'group'
+
             return (
               <div key={b.id} className={`bg-white rounded-2xl border shadow-sm p-4 ${b.status === 'en_retard' ? 'border-red-200' : isOffline ? 'border-amber-200' : 'border-slate-100'}`}>
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-14 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">{(b.books?.cover_url || b._book_cover) ? <img src={b.books?.cover_url || b._book_cover} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-200" />}</div>
+                  <div className="w-10 h-14 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
+                    {(b.books?.cover_url || b._book_cover) ? <img src={b.books?.cover_url || b._book_cover} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-200" />}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-900 text-sm truncate">{b.books?.title || b._book_title}</p>
-                    <p className="text-slate-400 text-xs">{b.profiles?.full_name || b._member_name}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-slate-400 text-xs">{b.profiles?.full_name || b._member_name}</p>
+                      {isGroup && <Users className="w-3 h-3 text-blue-500" />}
+                      {b.borrowee_name && <span className="text-xs text-blue-600 font-medium">→ {b.borrowee_name}</span>}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${cfg.style}`}><StatusIcon className="w-3 h-3" />{cfg.label}</span>
                       {!isOffline && <span className="text-xs text-slate-400">{new Date(b.due_date).toLocaleDateString('fr-FR')}</span>}
