@@ -69,6 +69,7 @@ function BookDetailModal({ book, onClose }) {
   const [summaryExpanded, setSummaryExpanded] = useState(false)
   const [imgError,        setImgError]        = useState(false)
   const [borrowFee,       setBorrowFee]       = useState(500)
+  const [borrowDuration,  setBorrowDuration]  = useState(14)
 
   useEffect(() => {
     if (book) {
@@ -191,7 +192,7 @@ function BookDetailModal({ book, onClose }) {
 
 
   const isAnnual  = ['annual', 'actif_annuel'].includes(userProfile?.membership_type) || userProfile?.profile_status === 'actif_annuel'
-  const feeLabel  = isAnnual ? "Inclus dans l'adhésion" : `${borrowFee.toLocaleString('fr-FR')} FCFA`
+  const feeLabel  = isAnnual ? 'Inclus (Abonné)' : `${borrowFee.toLocaleString('fr-FR')} FCFA`
   const todayFmt  = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
   if (!book) return null
@@ -303,11 +304,23 @@ function BookDetailModal({ book, onClose }) {
               {reserveResult ? (
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 space-y-3">
                   <p className="text-green-800 font-semibold text-sm">Réservation confirmée</p>
-                  <p className="text-green-700 text-xs leading-relaxed">
-                    Votre demande a bien été enregistrée pour le {todayFmt}.<br/>
-                    Contribution : <span className="font-semibold">{feeLabel}</span>
-                    {!isAnnual && <span className="text-gray-400"> (à régler lors du retrait)</span>}
+                  <p className="text-green-800 text-xs leading-relaxed font-medium">
+                    Demande enregistrée ! Votre livre vous attend au bureau.
                   </p>
+                  <div className="bg-white border border-green-200 rounded-xl p-3 space-y-1.5 mt-1">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">Durée du prêt</span>
+                      <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">Contribution</span>
+                      <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">Date de la demande</span>
+                      <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
+                    </div>
+                  </div>
                   <p className="text-green-500 text-xs font-light">
                     Réservation valable jusqu'au {new Date(reserveResult.expiresAt).toLocaleDateString('fr-FR')} à {new Date(reserveResult.expiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -359,14 +372,21 @@ function BookDetailModal({ book, onClose }) {
                       <span className="text-xs font-medium text-gray-800">{todayFmt}</span>
                     </div>
                     <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 font-light">Durée du prêt</span>
+                      <span className="text-xs font-medium text-gray-800">{borrowDuration} jours</span>
+                    </div>
+                    <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-500 font-light">Contribution</span>
                       <span className={`text-xs font-semibold ${isAnnual ? 'text-green-700' : 'text-gray-800'}`}>{feeLabel}</span>
                     </div>
                   </div>
                   <button onClick={() => setShowReserveForm(true)}
                     className="w-full py-3.5 bg-green-700 text-white rounded-2xl text-sm font-semibold tracking-wide hover:bg-green-800 active:scale-[.98] transition-all shadow-sm">
-                    Réserver ce livre (48h)
+                    Confirmer la réservation
                   </button>
+                  <p className="text-xs text-gray-400 italic text-center leading-relaxed">
+                    *Une fois validé, votre livre sera conservé au bureau des Navigateurs pendant 48h pour votre retrait.*
+                  </p>
                 </>
 
               ) : (
