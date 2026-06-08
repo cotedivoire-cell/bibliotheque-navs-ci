@@ -7,18 +7,22 @@ import {
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
 
-/* ── Carte compteur ── */
-function StatCard({ icon: Icon, iconColor, bgColor, label, value }) {
+/* ── Carte compteur cliquable ── */
+function StatCard({ icon: Icon, iconColor, bgColor, label, value, filterKey, activeFilter, onFilter }) {
+  const isActive = activeFilter === filterKey
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-3">
+    <button onClick={() => onFilter(isActive ? null : filterKey)}
+      className={`bg-white rounded-2xl p-5 shadow-sm border flex flex-col gap-3 text-left w-full transition-all ${
+        isActive ? 'border-green-400 ring-2 ring-green-100' : 'border-slate-100 hover:border-slate-200'
+      }`}>
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bgColor}`}>
         <Icon className={`w-4 h-4 ${iconColor}`} strokeWidth={1.8} />
       </div>
       <div>
-        <p className="text-3xl font-bold text-slate-900 leading-none">{value ?? '—'}</p>
-        <p className="text-xs text-slate-400 font-medium mt-1.5">{label}</p>
+        <p className={`text-3xl font-bold leading-none ${isActive ? 'text-green-700' : 'text-slate-900'}`}>{value ?? '—'}</p>
+        <p className={`text-xs font-medium mt-1.5 ${isActive ? 'text-green-600' : 'text-slate-400'}`}>{label}</p>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -224,8 +228,9 @@ function MemberCard({ member, onRefresh }) {
 function MembersPage() {
   const [members, setMembers] = useState([])
   const [stats,   setStats]   = useState({ total:0, unit:0, annual:0, group:0, pending:0, blocked:0 })
-  const [loading, setLoading] = useState(true)
-  const [search,  setSearch]  = useState('')
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [activeFilter, setActiveFilter] = useState(null)
 
   const loadMembers = async () => {
     const { data } = await supabase.from('profiles').select('*').eq('role','member').order('created_at', { ascending:false })
@@ -244,9 +249,16 @@ function MembersPage() {
 
   useEffect(() => { loadMembers() }, [])
 
-  const filtered = members.filter(m =>
-    !search || m.full_name?.toLowerCase().includes(search.toLowerCase()) || m.phone?.includes(search)
-  )
+  const filtered = members.filter(m => {
+    const matchSearch = !search || m.full_name?.toLowerCase().includes(search.toLowerCase()) || m.phone?.includes(search)
+    const matchFilter = !activeFilter
+      || (activeFilter === 'unit'    && (m.profile_status === 'actif_unite'  || (m.profile_status === 'actif' && m.membership_type === 'unit')))
+      || (activeFilter === 'annual'  && (m.profile_status === 'actif_annuel' || m.membership_type === 'annual'))
+      || (activeFilter === 'group'   && m.account_type === 'group')
+      || (activeFilter === 'pending' && m.profile_status === 'en_attente')
+      || (activeFilter === 'blocked' && m.is_blocked)
+    return matchSearch && matchFilter
+  })
 
   return (
     <AdminLayout>
@@ -262,17 +274,28 @@ function MembersPage() {
 
       {/* Compteurs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard icon={BookOpen}    iconColor="text-green-800"  bgColor="bg-green-50"  label="À l'unité"   value={stats.unit}    />
-        <StatCard icon={Calendar}    iconColor="text-blue-700"   bgColor="bg-blue-50"   label="Abonnement"  value={stats.annual}  />
-        <StatCard icon={Users}       iconColor="text-violet-700" bgColor="bg-violet-50" label="Groupes"     value={stats.group}   />
-        <StatCard icon={Clock}       iconColor="text-amber-700"  bgColor="bg-amber-50"  label="En attente"  value={stats.pending} />
-        <StatCard icon={ShieldAlert} iconColor="text-red-500"    bgColor="bg-red-50"    label="Bloqués"     value={stats.blocked} />
+        <StatCard icon={BookOpen}    iconColor="text-green-800"  bgColor="bg-green-50"  label="À l'unité"   value={stats.unit}    filterKey="unit"    activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <StatCard icon={Calendar}    iconColor="text-blue-700"   bgColor="bg-blue-50"   label="Abonnement"  value={stats.annual}  filterKey="annual"  activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <StatCard icon={Users}       iconColor="text-violet-700" bgColor="bg-violet-50" label="Groupes"     value={stats.group}   filterKey="group"   activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <StatCard icon={Clock}       iconColor="text-amber-700"  bgColor="bg-amber-50"  label="En attente"  value={stats.pending} filterKey="pending" activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <StatCard icon={ShieldAlert} iconColor="text-red-500"    bgColor="bg-red-50"    label="Bloqués"     value={stats.blocked} filterKey="blocked" activeFilter={activeFilter} onFilter={setActiveFilter} />
       </div>
+      {/* Filtre actif — label + reset */}
+      {activeFilter && (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs text-slate-500 font-light">
+            Filtre actif : <span className="font-semibold text-green-700 capitalize">{activeFilter === 'unit' ? "À l'unité" : activeFilter === 'annual' ? 'Abonnement' : activeFilter === 'group' ? 'Groupes' : activeFilter === 'pending' ? 'En attente' : 'Bloqués'}</span>
+          </span>
+          <button onClick={() => setActiveFilter(null)} className="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1 transition-colors">
+            <X className="w-3 h-3" />Réinitialiser
+          </button>
+        </div>
+      )}
 
       {/* Recherche */}
       <div className="relative mb-5">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" strokeWidth={1.5} />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        <input type="text" value={search} onChange={e => { setSearch(e.target.value); if (e.target.value) setActiveFilter(null) }}
           placeholder="Rechercher un membre..."
           className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 shadow-sm transition-all" />
         {search && (
