@@ -96,6 +96,14 @@ function MembersPage() {
     setStats(prev => ({ ...prev, blocked: prev.blocked + (member.is_blocked ? -1 : 1) }))
   }
 
+  const handleToggleGroup = async (member) => {
+    const newType = member.account_type === 'group' ? 'individual' : 'group'
+    const newMax  = newType === 'group' ? 10 : 3
+    await supabase.from('profiles').update({ account_type: newType, max_borrowings: newMax }).eq('id', member.id)
+    setMembers(prev => prev.map(m => m.id === member.id ? { ...m, account_type: newType, max_borrowings: newMax } : m))
+    setStats(prev => ({ ...prev, group: prev.group + (newType === 'group' ? 1 : -1) }))
+  }
+
   const handleActivate = async (member) => {
     const newStatus = member.membership_type === 'annual' ? 'actif_annuel' : 'actif_unite'
     await supabase.from('profiles').update({ profile_status: newStatus }).eq('id', member.id)
@@ -248,6 +256,18 @@ function MembersPage() {
                     <button onClick={() => isEditing ? setEditingId(null) : handleEditOpen(member)}
                       className="p-2 text-slate-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-all">
                       <Pencil className="w-4 h-4" strokeWidth={1.5} />
+                    </button>
+
+                    {/* Bouton compte groupe */}
+                    <button onClick={() => handleToggleGroup(member)}
+                      title={isGroup ? 'Passer en compte individuel' : 'Passer en compte groupe'}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                        isGroup
+                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                          : 'bg-slate-100 text-slate-500 hover:bg-violet-50 hover:text-violet-700'
+                      }`}>
+                      <Users className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      {isGroup ? 'Groupe' : 'Indiv.'}
                     </button>
 
                     {/* Toggle bloc — interrupteur */}
