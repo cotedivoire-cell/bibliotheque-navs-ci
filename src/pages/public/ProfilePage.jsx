@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Pencil, X, Check, ThumbsUp, Users,
-  BookOpen, Clock, AlertCircle, BookMarked, History, Lightbulb
+  BookOpen, Clock, AlertCircle, BookMarked, History, Lightbulb,
+  Heart, ChevronRight
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -295,6 +296,23 @@ function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* ── Bouton Soutenir la bibliothèque ── */}
+        <button
+          onClick={() => navigate('/don')}
+          className="w-full flex items-center justify-between bg-gradient-to-r from-green-700 to-emerald-700 text-white rounded-2xl px-5 py-4 hover:from-green-800 hover:to-emerald-800 active:scale-[.99] transition-all shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Heart className="w-4 h-4 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold">Soutenir la bibliothèque</p>
+              <p className="text-xs text-green-200 font-light">Faire un don financier ou offrir un livre</p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-green-300 flex-shrink-0" strokeWidth={1.5} />
+        </button>
 
         {/* ── Onglets ── */}
         <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1">

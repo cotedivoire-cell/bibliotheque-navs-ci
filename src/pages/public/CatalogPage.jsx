@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Search, User, SlidersHorizontal, X, ChevronRight, Heart } from 'lucide-react'
+import { BookOpen, Search, User, SlidersHorizontal, X, ChevronRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import BookCard from '../../components/BookCard'
 import BookDetailModal from '../../components/BookDetailModal'
@@ -145,24 +145,15 @@ function CatalogPage() {
               <p className="text-xs text-gray-400 leading-tight font-light">Les Navigateurs — Côte d'Ivoire</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/don')}
-              className="flex items-center gap-1.5 border border-rose-100 rounded-xl px-3 py-1.5 bg-rose-50 hover:bg-rose-100 transition-all"
-            >
-              <Heart className="w-3.5 h-3.5 text-rose-400" strokeWidth={1.5} />
-              <span className="text-xs font-medium text-rose-500 hidden sm:block">Soutenir</span>
-            </button>
-            <button
-              onClick={() => navigate(user ? '/profile' : '/login')}
-              className="flex items-center gap-1.5 border border-gray-100 rounded-xl px-3 py-1.5 bg-white hover:border-green-300 transition-all group"
-            >
-              <User className="w-3.5 h-3.5 text-gray-300 group-hover:text-green-600 transition-colors" strokeWidth={1.5} />
-              <span className="text-xs font-medium text-gray-500 tracking-wide group-hover:text-green-700 transition-colors hidden sm:block">
-                {user ? 'Mon espace' : 'Connexion'}
-              </span>
-            </button>
-          </div>
+          <button
+            onClick={() => navigate(user ? '/profile' : '/login')}
+            className="flex items-center gap-1.5 border border-gray-100 rounded-xl px-3 py-1.5 bg-white hover:border-green-300 transition-all group"
+          >
+            <User className="w-3.5 h-3.5 text-gray-300 group-hover:text-green-600 transition-colors" strokeWidth={1.5} />
+            <span className="text-xs font-medium text-gray-500 tracking-wide group-hover:text-green-700 transition-colors">
+              {user ? 'Mon espace' : 'Connexion'}
+            </span>
+          </button>
         </div>
 
         {/* Ligne 2 : Recherche + filtre avancé */}
@@ -216,23 +207,6 @@ function CatalogPage() {
 
       {/* ── Contenu ── */}
       <div className="pb-8">
-
-        {/* ── Bannière don ── */}
-        <button
-          onClick={() => navigate('/don')}
-          className="mx-4 mb-3 flex items-center justify-between bg-gradient-to-r from-green-700 to-emerald-700 text-white rounded-2xl px-4 py-3 hover:from-green-800 hover:to-emerald-800 transition-all shadow-sm group w-[calc(100%-2rem)]"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Heart className="w-3.5 h-3.5 text-white" strokeWidth={1.5} />
-            </div>
-            <div className="text-left">
-              <p className="text-xs font-semibold">Soutenir la bibliothèque</p>
-              <p className="text-xs text-green-200 font-light">Don financier ou de livre — merci !</p>
-            </div>
-          </div>
-          <span className="text-green-200 group-hover:text-white text-xs flex-shrink-0">→</span>
-        </button>
 
         {/* Compteur + reset */}
         {!loading && isFiltered && (
