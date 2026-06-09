@@ -48,7 +48,9 @@ function StatCard({ icon: Icon, iconColor, bgColor, label, value, filterKey, act
 /* ════════════════════════════════════════════════
    COMPOSANT : BADGE STATUT
 ════════════════════════════════════════════════ */
-function StatusBadge({ status, membershipType }) {
+function StatusBadge({ status, membershipType, accountType }) {
+  if (accountType === 'group')
+    return <span className="bg-violet-50 text-violet-700 text-xs font-medium px-2.5 py-0.5 rounded-full">Groupe / Cellule</span>
   if (status === 'en_attente')
     return <span className="bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-0.5 rounded-full">En attente</span>
   if (status === 'actif_annuel' || membershipType === 'annual')
@@ -70,10 +72,12 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
   const handleToggleGroup = async (e) => {
     e.stopPropagation()
     const newType = isGroup ? 'individual' : 'group'
-    const newMax  = newType === 'group' ? 10 : 3
+    const newMax = newType === 'group' ? 10 : 3
     await supabase.from('profiles')
       .update({ account_type: newType, max_borrowings: newMax })
       .eq('id', member.id)
+    // onUpdate déclenche la mise à jour de selectedMember → le useEffect
+    // de MemberDrawer synchronise automatiquement editForm.max_borrowings
     onUpdate(member.id, { account_type: newType, max_borrowings: newMax })
   }
 
@@ -129,7 +133,7 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
                 <Phone className="w-3 h-3" strokeWidth={1.5} />{member.phone}
               </span>
             )}
-            <StatusBadge status={member.profile_status} membershipType={member.membership_type} />
+            <StatusBadge status={member.profile_status} membershipType={member.membership_type} accountType={member.account_type} />
           </div>
         </div>
 
@@ -195,7 +199,7 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
   const [loadingSt,setLoadingSt]= useState(false)
   const [activeTab,setActiveTab]= useState('details') // 'details' | 'stats'
 
-  /* Réinitialise le formulaire quand le membre change */
+  /* Réinitialise le formulaire complet quand le membre change */
   useEffect(() => {
     if (member) {
       setEditForm({
@@ -207,6 +211,13 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
       setActiveTab('details')
     }
   }, [member?.id])
+
+  /* Synchronise max_borrowings dans le formulaire quand le toggle groupe change */
+  useEffect(() => {
+    if (member) {
+      setEditForm(prev => ({ ...prev, max_borrowings: member.max_borrowings || 3 }))
+    }
+  }, [member?.max_borrowings, member?.account_type])
 
   const loadStats = async () => {
     if (!member || mStats) return
@@ -277,7 +288,7 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-slate-900 text-base leading-tight truncate">{member.full_name}</p>
-            <StatusBadge status={member.profile_status} membershipType={member.membership_type} />
+            <StatusBadge status={member.profile_status} membershipType={member.membership_type} accountType={member.account_type} />
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0">
             <X className="w-5 h-5" strokeWidth={1.5} />
