@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   BookOpen, Users, Clock, ShieldAlert, Calendar,
   Pencil, X, Search, Phone, CheckCircle,
-  BarChart2, User, LogOut
+  BarChart2, User, Plus, RotateCcw, AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -193,11 +193,17 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
    COMPOSANT : DRAWER LATÉRAL
 ════════════════════════════════════════════════ */
 function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
-  const [editForm, setEditForm] = useState({ full_name: '', phone: '', max_borrowings: 3 })
-  const [saving,   setSaving]   = useState(false)
-  const [mStats,   setMStats]   = useState(null)
-  const [loadingSt,setLoadingSt]= useState(false)
-  const [activeTab,setActiveTab]= useState('details') // 'details' | 'stats'
+  const [editForm,       setEditForm]       = useState({ full_name: '', phone: '', max_borrowings: 3 })
+  const [saving,         setSaving]         = useState(false)
+  const [mStats,         setMStats]         = useState(null)
+  const [loadingSt,      setLoadingSt]      = useState(false)
+  const [activeTab,      setActiveTab]      = useState('details') // 'details' | 'stats' | 'livres'
+  const [groupBorrows,   setGroupBorrows]   = useState([])
+  const [availableBooks, setAvailableBooks] = useState([])
+  const [selectedBookId, setSelectedBookId] = useState('')
+  const [attributing,    setAttributing]    = useState(false)
+  const [returning,      setReturning]      = useState(null)
+  const [groupLoading,   setGroupLoading]   = useState(false)
 
   /* Réinitialise le formulaire complet quand le membre change */
   useEffect(() => {
@@ -218,6 +224,28 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
       setEditForm(prev => ({ ...prev, max_borrowings: member.max_borrowings || 3 }))
     }
   }, [member?.max_borrowings, member?.account_type])
+
+  /* Charge les emprunts et livres disponibles quand l'onglet livres s'ouvre */
+  const loadGroupData = async () => {
+    if (!member || member.account_type !== 'group') return
+    setGroupLoading(true)
+    const [borrowsRes, booksRes] = await Promise.all([
+      supabase.from('borrowings')
+        .select('id, book_id, borrowed_at, due_date, books(id, title, author, cover_url)')
+        .eq('member_id', member.id)
+        .in('status', ['en_cours', 'en_retard'])
+        .order('borrowed_at', { ascending: false }),
+      supabase.from('books')
+        .select('id, title, author, available_copies')
+        .eq('is_active', true)
+        .gt('available_copies', 0)
+        .order('title'),
+    ])
+    setGroupBorrows(borrowsRes.data || [])
+    setAvailableBooks(booksRes.data || [])
+    setSelectedBookId('')
+    setGroupLoading(false)
+  }
 
   const loadStats = async () => {
     if (!member || mStats) return
@@ -249,6 +277,54 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     if (tab === 'stats') loadStats()
+    if (tab === 'livres') loadGroupData()
+  }
+
+  /* Attribuer un livre au groupe */
+  const handleAttributeBook = async () => {
+    if (!selectedBookId) return
+    const book = availableBooks.find(b => b.id === selectedBookId)
+    if (!book) return
+    setAttributing(true)
+    const durationRes = await supabase.from('settings').select('value').eq('key', 'standard_borrow_duration').single()
+    const days = parseInt(durationRes.data?.value || '14')
+    const dueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+    const { error } = await supabase.from('borrowings').insert([{
+      book_id:      selectedBookId,
+      member_id:    member.id,
+      loan_type:    'location',
+      amount_paid:  0,
+      borrowed_at:  new Date().toISOString(),
+      due_date:     dueDate,
+      status:       'en_cours',
+    }])
+    if (!error) {
+      await supabase.from('books')
+        .update({ available_copies: Math.max(0, book.available_copies - 1) })
+        .eq('id', selectedBookId)
+      await loadGroupData()
+    }
+    setAttributing(false)
+  }
+
+  /* Enregistrer le retour d'un livre */
+  const handleReturnBook = async (borrowing) => {
+    setReturning(borrowing.id)
+    await supabase.from('borrowings')
+      .update({ status: 'retourné', returned_at: new Date().toISOString() })
+      .eq('id', borrowing.id)
+    await supabase.from('books')
+      .update({ available_copies: supabase.rpc ? undefined : undefined })
+      .eq('id', borrowing.book_id)
+    // Incrémenter manuellement
+    const { data: book } = await supabase.from('books').select('available_copies, total_copies').eq('id', borrowing.book_id).single()
+    if (book) {
+      await supabase.from('books')
+        .update({ available_copies: Math.min(book.total_copies, book.available_copies + 1) })
+        .eq('id', borrowing.book_id)
+    }
+    await loadGroupData()
+    setReturning(null)
   }
 
   const handleSave = async () => {
@@ -301,14 +377,22 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
             onClick={() => handleTabChange('details')}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'details' ? 'bg-green-700 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
           >
-            <Pencil className="w-3.5 h-3.5" strokeWidth={1.5} />Fiche membre
+            <Pencil className="w-3.5 h-3.5" strokeWidth={1.5} />Fiche
           </button>
           <button
             onClick={() => handleTabChange('stats')}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'stats' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
           >
-            <BarChart2 className="w-3.5 h-3.5" strokeWidth={1.5} />Statistiques
+            <BarChart2 className="w-3.5 h-3.5" strokeWidth={1.5} />Stats
           </button>
+          {isGroup && (
+            <button
+              onClick={() => handleTabChange('livres')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'livres' ? 'bg-violet-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <BookOpen className="w-3.5 h-3.5" strokeWidth={1.5} />Livres
+            </button>
+          )}
         </div>
 
         {/* ── Contenu scrollable ── */}
@@ -388,6 +472,114 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
                 </div>
               </div>
             </>
+          )}
+
+          {activeTab === 'livres' && isGroup && (
+            <div className="space-y-4">
+              {/* Compteur quota */}
+              <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Livres attribués au groupe</p>
+                  <p className="text-2xl font-bold text-violet-900 mt-1">
+                    {groupBorrows.length}
+                    <span className="text-base font-normal text-violet-400"> / {member.max_borrowings || 10}</span>
+                  </p>
+                </div>
+                <div className={
+                  groupBorrows.length >= (member.max_borrowings || 10)
+                    ? 'w-12 h-12 rounded-full bg-red-100 flex items-center justify-center'
+                    : 'w-12 h-12 rounded-full bg-violet-100 flex items-center justify-center'
+                }>
+                  <Users className={
+                    groupBorrows.length >= (member.max_borrowings || 10)
+                      ? 'w-6 h-6 text-red-500'
+                      : 'w-6 h-6 text-violet-600'
+                  } strokeWidth={1.5} />
+                </div>
+              </div>
+
+              {/* Sélecteur + bouton attribution */}
+              {groupBorrows.length >= (member.max_borrowings || 10) ? (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                  <p className="text-xs text-red-600">Quota maximum de {member.max_borrowings || 10} livres atteint pour ce groupe.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Attribuer un livre</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedBookId}
+                      onChange={e => setSelectedBookId(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-all"
+                    >
+                      <option value="">Sélectionner un livre disponible...</option>
+                      {availableBooks.map(book => (
+                        <option key={book.id} value={book.id}>
+                          {book.title} — {book.author} ({book.available_copies} dispo.)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAttributeBook}
+                      disabled={!selectedBookId || attributing}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-violet-600 text-white rounded-xl text-xs font-semibold hover:bg-violet-700 disabled:opacity-40 transition-colors flex-shrink-0 shadow-sm"
+                    >
+                      <Plus className="w-4 h-4" strokeWidth={2} />
+                      {attributing ? '...' : 'Attribuer'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Liste livres empruntés */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Livres en cours</label>
+                {groupLoading ? (
+                  <div className="space-y-2 animate-pulse">
+                    {[1,2].map(i => <div key={i} className="h-14 bg-slate-100 rounded-xl" />)}
+                  </div>
+                ) : groupBorrows.length === 0 ? (
+                  <div className="text-center py-6">
+                    <BookOpen className="w-8 h-8 text-slate-200 mx-auto mb-2" strokeWidth={1} />
+                    <p className="text-slate-400 text-xs font-light">Aucun livre attribué pour l'instant</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {groupBorrows.map(borrow => (
+                      <div key={borrow.id} className="bg-white border border-slate-100 rounded-xl p-3 flex items-center gap-3 shadow-sm">
+                        {/* Couverture */}
+                        <div className="w-10 h-14 bg-slate-100 flex-shrink-0 overflow-hidden shadow-sm" style={{ borderRadius: 0 }}>
+                          {borrow.books?.cover_url
+                            ? <img src={borrow.books.cover_url} alt="" className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
+                            : <div className="w-full h-full bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center">
+                                <span className="text-white/60 text-xs font-bold">{borrow.books?.title?.charAt(0)}</span>
+                              </div>
+                          }
+                        </div>
+                        {/* Infos */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 text-xs leading-tight line-clamp-2">{borrow.books?.title}</p>
+                          <p className="text-slate-400 text-xs capitalize mt-0.5 truncate">{borrow.books?.author}</p>
+                          <p className="text-slate-300 text-xs mt-0.5">
+                            Jusqu'au {new Date(borrow.due_date).toLocaleDateString('fr-FR')}
+                          </p>
+                        </div>
+                        {/* Retour */}
+                        <button
+                          onClick={() => handleReturnBook(borrow)}
+                          disabled={returning === borrow.id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-green-50 text-slate-500 hover:text-green-700 rounded-xl text-xs font-medium transition-all disabled:opacity-50 flex-shrink-0"
+                        >
+                          <RotateCcw className="w-3 h-3" strokeWidth={1.5} />
+                          {returning === borrow.id ? '...' : 'Retour'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {activeTab === 'stats' && (
