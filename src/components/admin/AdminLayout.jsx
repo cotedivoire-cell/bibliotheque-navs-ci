@@ -13,6 +13,7 @@ const navItems = [
   { path: '/admin/finances',     label: 'Finances'     },
   { path: '/admin/suggestions',  label: 'Suggestions'  },
   { path: '/admin/settings',     label: 'Paramètres'   },
+  { path: '/admin/dons',           label: 'Dons'         },
 ]
 
 function AdminLayout({ children }) {

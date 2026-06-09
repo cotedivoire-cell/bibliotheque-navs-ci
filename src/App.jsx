@@ -14,6 +14,8 @@ import AdminReservationsPage from './pages/admin/AdminReservationsPage'
 import FinancePage           from './pages/admin/FinancePage'
 import SuggestionsPage       from './pages/admin/SuggestionsPage'
 import SettingsPage          from './pages/admin/SettingsPage'
+import DonationsAdminPage    from './pages/admin/DonationsAdminPage'
+import DonationPage           from './pages/public/DonationPage'
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -61,6 +63,8 @@ function App() {
         <Route path="/admin/finances"      element={<AdminRoute><FinancePage /></AdminRoute>} />
         <Route path="/admin/suggestions"   element={<AdminRoute><SuggestionsPage /></AdminRoute>} />
         <Route path="/admin/settings"      element={<AdminRoute><SettingsPage /></AdminRoute>} />
+        <Route path="/admin/dons"           element={<AdminRoute><DonationsAdminPage /></AdminRoute>} />
+        <Route path="/don"                  element={<DonationPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
