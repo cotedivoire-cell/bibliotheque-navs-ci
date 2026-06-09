@@ -84,6 +84,7 @@ export default function DonationPage() {
   const [donorName,    setDonorName]    = useState('')
   const [donorPhone,   setDonorPhone]   = useState('')
   const [message,      setMessage]      = useState('')
+  const [isAnonymous,  setIsAnonymous]  = useState(false)
 
   // Don en nature
   const [bookTitle,    setBookTitle]    = useState('')
@@ -105,14 +106,14 @@ export default function DonationPage() {
   const finalAmount = amount || parseInt(customAmount) || 0
 
   const handleSubmitArgent = async () => {
-    if (!donorName.trim()) { setError('Veuillez entrer votre nom.'); return }
+    if (!isAnonymous && !donorName.trim()) { setError('Veuillez entrer votre nom ou choisir le don anonyme.'); return }
     if (finalAmount < 500)  { setError('Montant minimum : 500 FCFA.'); return }
     if (!payMethod)         { setError('Veuillez choisir un mode de paiement.'); return }
     setSubmitting(true); setError('')
     const { error: err } = await supabase.from('donations').insert([{
-      member_id:      user?.id || null,
-      donor_name:     donorName.trim(),
-      donor_phone:    donorPhone.trim() || null,
+      member_id:      isAnonymous ? null : (user?.id || null),
+      donor_name:     isAnonymous ? 'Anonyme' : donorName.trim(),
+      donor_phone:    isAnonymous ? null : (donorPhone.trim() || null),
       type:           'argent',
       amount:         finalAmount,
       payment_method: payMethod,
@@ -124,14 +125,14 @@ export default function DonationPage() {
   }
 
   const handleSubmitLivre = async () => {
-    if (!donorName.trim())  { setError('Veuillez entrer votre nom.'); return }
+    if (!isAnonymous && !donorName.trim()) { setError('Veuillez entrer votre nom ou choisir le don anonyme.'); return }
     if (!bookTitle.trim())  { setError('Veuillez entrer le titre du livre.'); return }
     if (!condition)         { setError("Veuillez indiquer l'état du livre."); return }
     setSubmitting(true); setError('')
     const { error: err } = await supabase.from('donations').insert([{
-      member_id:      user?.id || null,
-      donor_name:     donorName.trim(),
-      donor_phone:    donorPhone.trim() || null,
+      member_id:      isAnonymous ? null : (user?.id || null),
+      donor_name:     isAnonymous ? 'Anonyme' : donorName.trim(),
+      donor_phone:    isAnonymous ? null : (donorPhone.trim() || null),
       type:           'livre',
       book_title:     bookTitle.trim(),
       book_author:    bookAuthor.trim() || null,
@@ -217,17 +218,47 @@ export default function DonationPage() {
 
         {/* ── Coordonnées (communes) ── */}
         <div className={cardClass}>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Vos coordonnées</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Nom complet *</label>
-              <input type="text" value={donorName} onChange={e => setDonorName(e.target.value)} placeholder="Prénom et Nom" className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Téléphone</label>
-              <input type="tel" value={donorPhone} onChange={e => setDonorPhone(e.target.value)} placeholder="+225 XX XX XX XX" className={inputClass} />
-            </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Vos coordonnées</p>
+            {/* Toggle don anonyme */}
+            <button
+              type="button"
+              onClick={() => { setIsAnonymous(v => !v); setError('') }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+                isAnonymous
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${isAnonymous ? 'border-white bg-white' : 'border-gray-400'}`}>
+                {isAnonymous && <div className="w-1.5 h-1.5 rounded-full bg-gray-900" />}
+              </div>
+              Don anonyme
+            </button>
           </div>
+
+          {isAnonymous ? (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                <span className="text-gray-500 text-xs font-bold">?</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">Don anonyme</p>
+                <p className="text-xs text-gray-400 font-light">Votre identité ne sera pas enregistrée</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Nom complet *</label>
+                <input type="text" value={donorName} onChange={e => setDonorName(e.target.value)} placeholder="Prénom et Nom" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Téléphone</label>
+                <input type="tel" value={donorPhone} onChange={e => setDonorPhone(e.target.value)} placeholder="+225 XX XX XX XX" className={inputClass} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ══════════════ DON FINANCIER ══════════════ */}
