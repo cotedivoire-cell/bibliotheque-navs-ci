@@ -39,9 +39,9 @@ function BooksPage() {
       supabase.from('books').select('*, categories(id, name)').eq('is_active', true).order('title'),
       supabase.from('categories').select('*').order('name'),
     ])
+    setPage(1)
     setBooks(booksRes.data || [])
     setCategories(catsRes.data || [])
-    setPage(1)
     setLoading(false)
   }
 
@@ -130,7 +130,7 @@ function BooksPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Livres</h1>
           <p className="text-slate-400 text-xs mt-0.5 font-light">
-            {loading ? '...' : `${books.length} ouvrage${books.length > 1 ? 's' : ''} · page ${page}/${totalPages || 1}`}
+            {loading ? '...' : `${books.length} ouvrage${books.length > 1 ? 's' : ''} dans le catalogue`}
           </p>
         </div>
         <button
@@ -360,6 +360,33 @@ function BooksPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
+          <p className="text-xs text-slate-400">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, books.length)} sur {books.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">
+              ←
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+              <button key={n} onClick={() => setPage(n)}
+                className={`w-8 h-8 text-xs rounded-lg transition-colors ${
+                  n === page ? 'bg-green-700 text-white font-semibold' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}>
+                {n}
+              </button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">
+              →
+            </button>
+          </div>
         </div>
       )}
     </AdminLayout>

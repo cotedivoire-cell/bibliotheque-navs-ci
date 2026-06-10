@@ -48,6 +48,7 @@ function BorrowingsPage() {
   const [scanSuccess,   setScanSuccess]   = useState(false)
   const [scanLoading,   setScanLoading]   = useState(false)
   const [groupActiveCount, setGroupActiveCount] = useState(0)
+  const [page, setPage] = useState(1)
 
   const scanModeRef = useRef(null)
 
@@ -220,12 +221,11 @@ function BorrowingsPage() {
   const activeCount    = borrowings.filter(b => ['en_cours', 'en_retard', 'offline'].includes(b.status)).length
   const overdueCount   = borrowings.filter(b => b.status === 'en_retard').length
 
+  const PAGE_SIZE  = 12
+  const dataList   = borrowings
+  const totalPages = Math.ceil(dataList.length / PAGE_SIZE)
+  const paginated  = dataList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  // Pagination
-  const PAGE_SIZE_B  = 12
-  const listSource   = borrowings
-  const totalPagesB  = Math.ceil(listSource.length / PAGE_SIZE_B)
-  const paginatedB   = listSource.slice((page - 1) * PAGE_SIZE_B, page * PAGE_SIZE_B)
   return (
     <AdminLayout>
       {scanMode && <BookScanner title={scanMode === 'borrow' ? 'Scanner pour emprunt' : 'Scanner pour retour rapide'} onResult={handleScanResult} onClose={() => { setScanMode(null); scanModeRef.current = null }} />}
@@ -314,7 +314,7 @@ function BorrowingsPage() {
 
       {loading ? <p className="text-slate-400 text-sm">Chargement...</p> : borrowings.length === 0 ? <div className="text-center py-20 text-slate-400"><p className="font-medium">Aucun emprunt</p></div> : (
         <div className="space-y-3">
-          {paginatedB.map(b => {
+          {paginated.map(b => {
             const cfg = STATUS[b.status] || STATUS.en_cours
             const StatusIcon = cfg.Icon
             const isActive  = ['en_cours', 'en_retard', 'offline'].includes(b.status)
@@ -362,6 +362,27 @@ function BorrowingsPage() {
               </div>
             )
           })}
+        </div>
+      )}
+    
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
+          <p className="text-xs text-slate-400">
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, dataList.length)} sur {dataList.length} emprunts
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">←</button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+              <button key={n} onClick={() => setPage(n)}
+                className={`w-8 h-8 text-xs rounded-lg transition-colors ${n === page ? 'bg-green-700 text-white font-semibold' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                {n}
+              </button>
+            ))}
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">→</button>
+          </div>
         </div>
       )}
     </AdminLayout>
