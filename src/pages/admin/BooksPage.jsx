@@ -109,6 +109,10 @@ function BooksPage() {
 
   const handleField = (e) => setForm(prev=>({...prev,[e.target.name]:e.target.value}))
 
+  const PAGE_SIZE  = 12
+  const totalPages = Math.ceil(books.length / PAGE_SIZE)
+  const paginated  = books.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   return (
     <AdminLayout>
 
