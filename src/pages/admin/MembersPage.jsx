@@ -1,8 +1,28 @@
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-400">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} sur {filtered.length} membres
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">←</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+                <button key={n} onClick={() => setPage(n)}
+                  className={`w-8 h-8 text-xs rounded-lg transition-colors ${n === page ? 'bg-green-700 text-white font-semibold' : 'border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                  {n}
+                </button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors">→</button>
+            </div>
+          </div>
+        )}
 import { useEffect, useState } from 'react'
 import {
   BookOpen, Users, Clock, ShieldAlert, Calendar,
   Pencil, X, Search, Phone, CheckCircle,
-  BarChart2, User, LogOut
+  BarChart2, User, Plus, RotateCcw, AlertCircle
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -48,7 +68,9 @@ function StatCard({ icon: Icon, iconColor, bgColor, label, value, filterKey, act
 /* ════════════════════════════════════════════════
    COMPOSANT : BADGE STATUT
 ════════════════════════════════════════════════ */
-function StatusBadge({ status, membershipType }) {
+function StatusBadge({ status, membershipType, accountType }) {
+  if (accountType === 'group')
+    return <span className="bg-violet-50 text-violet-700 text-xs font-medium px-2.5 py-0.5 rounded-full">Groupe / Cellule</span>
   if (status === 'en_attente')
     return <span className="bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-0.5 rounded-full">En attente</span>
   if (status === 'actif_annuel' || membershipType === 'annual')
@@ -70,10 +92,12 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
   const handleToggleGroup = async (e) => {
     e.stopPropagation()
     const newType = isGroup ? 'individual' : 'group'
-    const newMax  = newType === 'group' ? 10 : 3
+    const newMax = newType === 'group' ? 10 : 3
     await supabase.from('profiles')
       .update({ account_type: newType, max_borrowings: newMax })
       .eq('id', member.id)
+    // onUpdate déclenche la mise à jour de selectedMember → le useEffect
+    // de MemberDrawer synchronise automatiquement editForm.max_borrowings
     onUpdate(member.id, { account_type: newType, max_borrowings: newMax })
   }
 
@@ -129,7 +153,7 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
                 <Phone className="w-3 h-3" strokeWidth={1.5} />{member.phone}
               </span>
             )}
-            <StatusBadge status={member.profile_status} membershipType={member.membership_type} />
+            <StatusBadge status={member.profile_status} membershipType={member.membership_type} accountType={member.account_type} />
           </div>
         </div>
 
@@ -189,13 +213,21 @@ function MemberRow({ member, onOpenDrawer, onUpdate }) {
    COMPOSANT : DRAWER LATÉRAL
 ════════════════════════════════════════════════ */
 function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
-  const [editForm, setEditForm] = useState({ full_name: '', phone: '', max_borrowings: 3 })
-  const [saving,   setSaving]   = useState(false)
-  const [mStats,   setMStats]   = useState(null)
-  const [loadingSt,setLoadingSt]= useState(false)
-  const [activeTab,setActiveTab]= useState('details') // 'details' | 'stats'
+  const [editForm,       setEditForm]       = useState({ full_name: '', phone: '', max_borrowings: 3 })
+  const [saving,         setSaving]         = useState(false)
+  const [mStats,         setMStats]         = useState(null)
+  const [loadingSt,      setLoadingSt]      = useState(false)
+  const [activeTab,      setActiveTab]      = useState('details') // 'details' | 'stats' | 'livres'
+  const [groupBorrows,   setGroupBorrows]   = useState([])
+  const [availableBooks, setAvailableBooks] = useState([])
+  const [selectedBookId, setSelectedBookId] = useState('')
+  const [attributing,    setAttributing]    = useState(false)
+  const [returning,      setReturning]      = useState(null)
+  const [groupLoading,   setGroupLoading]   = useState(false)
+  const [bookSearch,     setBookSearch]     = useState('')
+  const [showDrop,       setShowDrop]       = useState(false)
 
-  /* Réinitialise le formulaire quand le membre change */
+  /* Réinitialise le formulaire complet quand le membre change */
   useEffect(() => {
     if (member) {
       setEditForm({
@@ -207,6 +239,35 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
       setActiveTab('details')
     }
   }, [member?.id])
+
+  /* Synchronise max_borrowings dans le formulaire quand le toggle groupe change */
+  useEffect(() => {
+    if (member) {
+      setEditForm(prev => ({ ...prev, max_borrowings: member.max_borrowings || 3 }))
+    }
+  }, [member?.max_borrowings, member?.account_type])
+
+  /* Charge les emprunts et livres disponibles quand l'onglet livres s'ouvre */
+  const loadGroupData = async () => {
+    if (!member || member.account_type !== 'group') return
+    setGroupLoading(true)
+    const [borrowsRes, booksRes] = await Promise.all([
+      supabase.from('borrowings')
+        .select('id, book_id, borrowed_at, due_date, books(id, title, author, cover_url)')
+        .eq('member_id', member.id)
+        .in('status', ['en_cours', 'en_retard'])
+        .order('borrowed_at', { ascending: false }),
+      supabase.from('books')
+        .select('id, title, author, available_copies')
+        .eq('is_active', true)
+        .gt('available_copies', 0)
+        .order('title'),
+    ])
+    setGroupBorrows(borrowsRes.data || [])
+    setAvailableBooks(booksRes.data || [])
+    setSelectedBookId('')
+    setGroupLoading(false)
+  }
 
   const loadStats = async () => {
     if (!member || mStats) return
@@ -238,6 +299,54 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     if (tab === 'stats') loadStats()
+    if (tab === 'livres') loadGroupData()
+  }
+
+  /* Attribuer un livre au groupe */
+  const handleAttributeBook = async () => {
+    if (!selectedBookId) return
+    const book = availableBooks.find(b => b.id === selectedBookId)
+    if (!book) return
+    setAttributing(true)
+    const durationRes = await supabase.from('settings').select('value').eq('key', 'standard_borrow_duration').single()
+    const days = parseInt(durationRes.data?.value || '14')
+    const dueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+    const { error } = await supabase.from('borrowings').insert([{
+      book_id:      selectedBookId,
+      member_id:    member.id,
+      loan_type:    'location',
+      amount_paid:  0,
+      borrowed_at:  new Date().toISOString(),
+      due_date:     dueDate,
+      status:       'en_cours',
+    }])
+    if (!error) {
+      await supabase.from('books')
+        .update({ available_copies: Math.max(0, book.available_copies - 1) })
+        .eq('id', selectedBookId)
+      await loadGroupData()
+    }
+    setAttributing(false)
+  }
+
+  /* Enregistrer le retour d'un livre */
+  const handleReturnBook = async (borrowing) => {
+    setReturning(borrowing.id)
+    await supabase.from('borrowings')
+      .update({ status: 'retourné', returned_at: new Date().toISOString() })
+      .eq('id', borrowing.id)
+    await supabase.from('books')
+      .update({ available_copies: supabase.rpc ? undefined : undefined })
+      .eq('id', borrowing.book_id)
+    // Incrémenter manuellement
+    const { data: book } = await supabase.from('books').select('available_copies, total_copies').eq('id', borrowing.book_id).single()
+    if (book) {
+      await supabase.from('books')
+        .update({ available_copies: Math.min(book.total_copies, book.available_copies + 1) })
+        .eq('id', borrowing.book_id)
+    }
+    await loadGroupData()
+    setReturning(null)
   }
 
   const handleSave = async () => {
@@ -277,27 +386,49 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-slate-900 text-base leading-tight truncate">{member.full_name}</p>
-            <StatusBadge status={member.profile_status} membershipType={member.membership_type} />
+            <StatusBadge status={member.profile_status} membershipType={member.membership_type} accountType={member.account_type} />
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0">
             <X className="w-5 h-5" strokeWidth={1.5} />
           </button>
         </div>
 
-        {/* ── Onglets ── */}
-        <div className="flex gap-1 p-3 border-b border-slate-100">
-          <button
-            onClick={() => handleTabChange('details')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'details' ? 'bg-green-700 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
-          >
-            <Pencil className="w-3.5 h-3.5" strokeWidth={1.5} />Fiche membre
-          </button>
-          <button
-            onClick={() => handleTabChange('stats')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'stats' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
-          >
-            <BarChart2 className="w-3.5 h-3.5" strokeWidth={1.5} />Statistiques
-          </button>
+        {/* ── Onglets — Segmented Control iOS ── */}
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+            <button
+              onClick={() => handleTabChange('details')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${
+                activeTab === 'details'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Pencil className="w-3 h-3" strokeWidth={1.5} />Fiche
+            </button>
+            <button
+              onClick={() => handleTabChange('stats')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${
+                activeTab === 'stats'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <BarChart2 className="w-3 h-3" strokeWidth={1.5} />Stats
+            </button>
+            {isGroup && (
+              <button
+                onClick={() => handleTabChange('livres')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all ${
+                  activeTab === 'livres'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <BookOpen className="w-3 h-3" strokeWidth={1.5} />Livres
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Contenu scrollable ── */}
@@ -379,6 +510,164 @@ function MemberDrawer({ member, isOpen, onClose, onUpdate }) {
             </>
           )}
 
+          {activeTab === 'livres' && isGroup && (
+            <div className="space-y-4">
+              {/* Compteur quota — barre de progression */}
+              {(() => {
+                const max = member.max_borrowings || 10
+                const pct = Math.round((groupBorrows.length / max) * 100)
+                const full = groupBorrows.length >= max
+                return (
+                  <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Livres attribués</p>
+                      <p className="text-sm font-bold text-slate-900">
+                        {groupBorrows.length}
+                        <span className="text-slate-400 font-normal"> / {max}</span>
+                      </p>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          full ? 'bg-red-400' : pct > 70 ? 'bg-amber-400' : 'bg-violet-500'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {full && (
+                      <p className="text-xs text-red-500 mt-2 font-medium">Quota maximum atteint</p>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Sélecteur + bouton attribution */}
+              {groupBorrows.length >= (member.max_borrowings || 10) ? (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+                  <p className="text-xs text-red-600">Quota maximum de {member.max_borrowings || 10} livres atteint pour ce groupe.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Attribuer un livre</label>
+                  {/* Barre de recherche custom */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" strokeWidth={1.5} />
+                    <input
+                      type="text"
+                      value={bookSearch}
+                      onChange={e => { setBookSearch(e.target.value); setShowDrop(true); setSelectedBookId('') }}
+                      onFocus={() => setShowDrop(true)}
+                      placeholder="Rechercher un livre disponible..."
+                      className="w-full pl-9 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500 focus:bg-white transition-all"
+                    />
+                    {selectedBookId && (
+                      <button onClick={() => { setSelectedBookId(''); setBookSearch(''); setShowDrop(false) }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {/* Dropdown custom */}
+                    {showDrop && !selectedBookId && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-10 max-h-52 overflow-y-auto">
+                        {availableBooks
+                          .filter(b =>
+                            !bookSearch ||
+                            b.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
+                            b.author.toLowerCase().includes(bookSearch.toLowerCase())
+                          )
+                          .slice(0, 8)
+                          .map((book, i, arr) => (
+                            <button
+                              key={book.id}
+                              type="button"
+                              onClick={() => { setSelectedBookId(book.id); setBookSearch(book.title); setShowDrop(false) }}
+                              className={`w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors ${i < arr.length - 1 ? 'border-b border-slate-100' : ''}`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-slate-700 truncate">{book.title}</p>
+                                <p className="text-xs text-slate-400 truncate capitalize">{book.author}</p>
+                              </div>
+                              <span className="flex-shrink-0 bg-green-50 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                                {book.available_copies} dispo.
+                              </span>
+                            </button>
+                          ))
+                        }
+                        {availableBooks.filter(b => !bookSearch || b.title.toLowerCase().includes(bookSearch.toLowerCase()) || b.author.toLowerCase().includes(bookSearch.toLowerCase())).length === 0 && (
+                          <p className="text-center text-slate-400 text-xs py-4">Aucun livre trouvé</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Bouton attribuer */}
+                  <button
+                    onClick={handleAttributeBook}
+                    disabled={!selectedBookId || attributing}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 transition-colors shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" strokeWidth={2} />
+                    {attributing ? 'Attribution...' : 'Attribuer ce livre'}
+                  </button>
+                </div>
+              )}
+
+              {/* Liste livres attribués — design minimaliste */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Livres en cours</p>
+                {groupLoading ? (
+                  <div className="space-y-2 animate-pulse">
+                    {[1,2].map(i => <div key={i} className="h-16 bg-slate-100 rounded-xl" />)}
+                  </div>
+                ) : groupBorrows.length === 0 ? (
+                  <div className="text-center py-8">
+                    <BookOpen className="w-8 h-8 text-slate-200 mx-auto mb-2" strokeWidth={1} />
+                    <p className="text-slate-400 text-xs font-light">Aucun livre attribué pour l'instant</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+                    {groupBorrows.map((borrow, i) => (
+                      <div key={borrow.id}
+                        className={`flex items-center gap-3 px-4 py-3 ${i < groupBorrows.length - 1 ? 'border-b border-slate-50' : ''}`}>
+                        {/* Mini couverture */}
+                        <div className="w-8 h-11 bg-slate-100 flex-shrink-0 overflow-hidden" style={{ borderRadius: 0 }}>
+                          {borrow.books?.cover_url
+                            ? <img src={borrow.books.cover_url} alt="" className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
+                            : <div className="w-full h-full bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center">
+                                <span className="text-white/60 text-[9px] font-bold">{borrow.books?.title?.charAt(0)}</span>
+                              </div>
+                          }
+                        </div>
+                        {/* Titre + auteur */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{borrow.books?.title}</p>
+                          <p className="text-xs text-slate-400 truncate capitalize">{borrow.books?.author}</p>
+                        </div>
+                        {/* Date + retour */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <p className="text-xs text-slate-300 hidden sm:block">
+                            {new Date(borrow.due_date).toLocaleDateString('fr-FR')}
+                          </p>
+                          <button
+                            onClick={() => handleReturnBook(borrow)}
+                            disabled={returning === borrow.id}
+                            title="Enregistrer le retour"
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50"
+                          >
+                            {returning === borrow.id
+                              ? <span className="text-xs">...</span>
+                              : <RotateCcw className="w-4 h-4" strokeWidth={1.5} />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'stats' && (
             loadingSt ? (
               <div className="space-y-3 animate-pulse">
@@ -447,7 +736,6 @@ function MembersPage() {
   const [loading,       setLoading]       = useState(true)
   const [search,        setSearch]        = useState('')
   const [activeFilter,  setActiveFilter]  = useState('all')
-  const [page,          setPage]          = useState(1)
   const [selectedMember,setSelectedMember]= useState(null)
   const [isDrawerOpen,  setIsDrawerOpen]  = useState(false)
 
@@ -542,7 +830,7 @@ function MembersPage() {
         <input
           type="text"
           value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); if (e.target.value) setActiveFilter('all') }}
+          onChange={e => { setSearch(e.target.value); if (e.target.value) setActiveFilter('all') }}
           placeholder="Rechercher par nom ou téléphone..."
           className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 shadow-sm transition-all"
         />
@@ -594,7 +882,7 @@ function MembersPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(member => (
+          {paginated.map(member => (
             <MemberRow
               key={member.id}
               member={member}
