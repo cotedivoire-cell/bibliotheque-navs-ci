@@ -220,6 +220,12 @@ function BorrowingsPage() {
   const activeCount    = borrowings.filter(b => ['en_cours', 'en_retard', 'offline'].includes(b.status)).length
   const overdueCount   = borrowings.filter(b => b.status === 'en_retard').length
 
+
+  // Pagination
+  const PAGE_SIZE_B  = 12
+  const listSource   = borrowings
+  const totalPagesB  = Math.ceil(listSource.length / PAGE_SIZE_B)
+  const paginatedB   = listSource.slice((page - 1) * PAGE_SIZE_B, page * PAGE_SIZE_B)
   return (
     <AdminLayout>
       {scanMode && <BookScanner title={scanMode === 'borrow' ? 'Scanner pour emprunt' : 'Scanner pour retour rapide'} onResult={handleScanResult} onClose={() => { setScanMode(null); scanModeRef.current = null }} />}
@@ -308,7 +314,7 @@ function BorrowingsPage() {
 
       {loading ? <p className="text-slate-400 text-sm">Chargement...</p> : borrowings.length === 0 ? <div className="text-center py-20 text-slate-400"><p className="font-medium">Aucun emprunt</p></div> : (
         <div className="space-y-3">
-          {borrowings.map(b => {
+          {paginatedB.map(b => {
             const cfg = STATUS[b.status] || STATUS.en_cours
             const StatusIcon = cfg.Icon
             const isActive  = ['en_cours', 'en_retard', 'offline'].includes(b.status)

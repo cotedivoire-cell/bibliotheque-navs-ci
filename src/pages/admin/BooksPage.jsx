@@ -30,6 +30,7 @@ function BooksPage() {
   const [deleting,      setDeleting]      = useState(null)
   const [deleteError,   setDeleteError]   = useState('')
   const [qrBook,        setQrBook]        = useState(null)
+  const [page,          setPage]          = useState(1)
 
   useEffect(() => { loadAll() }, [])
 
@@ -40,6 +41,7 @@ function BooksPage() {
     ])
     setBooks(booksRes.data || [])
     setCategories(catsRes.data || [])
+    setPage(1)
     setLoading(false)
   }
 
@@ -128,7 +130,7 @@ function BooksPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Livres</h1>
           <p className="text-slate-400 text-xs mt-0.5 font-light">
-            {loading ? '...' : `${books.length} ouvrage${books.length > 1 ? 's' : ''} dans le catalogue`}
+            {loading ? '...' : `${books.length} ouvrage${books.length > 1 ? 's' : ''} · page ${page}/${totalPages || 1}`}
           </p>
         </div>
         <button
@@ -280,7 +282,7 @@ function BooksPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {books.map(book=>(
+          {paginated.map(book=>(
             <div key={book.id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 p-4">
               <div className="flex gap-4">
                 {/* Couverture */}

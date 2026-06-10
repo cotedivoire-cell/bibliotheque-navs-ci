@@ -716,6 +716,7 @@ function MembersPage() {
   const [loading,       setLoading]       = useState(true)
   const [search,        setSearch]        = useState('')
   const [activeFilter,  setActiveFilter]  = useState('all')
+  const [page,          setPage]          = useState(1)
   const [selectedMember,setSelectedMember]= useState(null)
   const [isDrawerOpen,  setIsDrawerOpen]  = useState(false)
 
@@ -778,6 +779,10 @@ function MembersPage() {
     return matchSearch && matchFilter
   })
 
+
+  const PAGE_SIZE  = 12
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   return (
     <AdminLayout>
 
@@ -793,11 +798,11 @@ function MembersPage() {
 
       {/* ── 5 Compteurs cliquables ── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard icon={BookOpen}    iconColor="text-green-800"  bgColor="bg-green-50"  label="À l'unité"  value={stats.unit}    filterKey="unit"    activeFilter={activeFilter} onFilter={setActiveFilter} />
-        <StatCard icon={Calendar}    iconColor="text-blue-700"   bgColor="bg-blue-50"   label="Abonnement" value={stats.annual}  filterKey="annual"  activeFilter={activeFilter} onFilter={setActiveFilter} />
-        <StatCard icon={Users}       iconColor="text-violet-700" bgColor="bg-violet-50" label="Groupes"    value={stats.group}   filterKey="group"   activeFilter={activeFilter} onFilter={setActiveFilter} />
-        <StatCard icon={Clock}       iconColor="text-amber-700"  bgColor="bg-amber-50"  label="En attente" value={stats.pending} filterKey="pending" activeFilter={activeFilter} onFilter={setActiveFilter} />
-        <StatCard icon={ShieldAlert} iconColor="text-red-500"    bgColor="bg-red-50"    label="Bloqués"    value={stats.blocked} filterKey="blocked" activeFilter={activeFilter} onFilter={setActiveFilter} />
+        <StatCard icon={BookOpen}    iconColor="text-green-800"  bgColor="bg-green-50"  label="À l'unité"  value={stats.unit}    filterKey="unit"    activeFilter={activeFilter} onFilter={v => { setActiveFilter(v); setPage(1) }} />
+        <StatCard icon={Calendar}    iconColor="text-blue-700"   bgColor="bg-blue-50"   label="Abonnement" value={stats.annual}  filterKey="annual"  activeFilter={activeFilter} onFilter={v => { setActiveFilter(v); setPage(1) }} />
+        <StatCard icon={Users}       iconColor="text-violet-700" bgColor="bg-violet-50" label="Groupes"    value={stats.group}   filterKey="group"   activeFilter={activeFilter} onFilter={v => { setActiveFilter(v); setPage(1) }} />
+        <StatCard icon={Clock}       iconColor="text-amber-700"  bgColor="bg-amber-50"  label="En attente" value={stats.pending} filterKey="pending" activeFilter={activeFilter} onFilter={v => { setActiveFilter(v); setPage(1) }} />
+        <StatCard icon={ShieldAlert} iconColor="text-red-500"    bgColor="bg-red-50"    label="Bloqués"    value={stats.blocked} filterKey="blocked" activeFilter={activeFilter} onFilter={v => { setActiveFilter(v); setPage(1) }} />
       </div>
 
       {/* ── Barre de recherche ── */}
@@ -806,7 +811,7 @@ function MembersPage() {
         <input
           type="text"
           value={search}
-          onChange={e => { setSearch(e.target.value); if (e.target.value) setActiveFilter('all') }}
+          onChange={e => { setSearch(e.target.value); setPage(1); if (e.target.value) setActiveFilter('all') }}
           placeholder="Rechercher par nom ou téléphone..."
           className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-slate-200 rounded-2xl focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 shadow-sm transition-all"
         />
@@ -858,7 +863,7 @@ function MembersPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(member => (
+          {paginated.map(member => (
             <MemberRow
               key={member.id}
               member={member}
