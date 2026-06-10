@@ -105,12 +105,18 @@ function LoginPage() {
               </div>
             </div>
 
+            <div className="flex justify-end -mt-1 mb-2">
+              <Link to="/forgot-password" className="text-xs text-green-700 hover:underline">
+                Mot de passe oublié ?
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-green-700 text-white py-3 rounded-xl text-sm font-semibold
                          hover:bg-green-800 active:scale-[.99] transition-all
-                         disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                         disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Connexion en cours...' : 'Se connecter'}
             </button>

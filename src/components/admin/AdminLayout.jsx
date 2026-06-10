@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { BookOpen, LogOut } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import OfflineBanner from '../OfflineBanner'
@@ -7,19 +8,27 @@ import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 const navItems = [
   { path: '/admin',              label: 'Dashboard'    },
   { path: '/admin/livres',       label: 'Livres'       },
-  { path: '/admin/membres',      label: 'Membres'      },
+  { path: '/admin/membres',      label: 'Membres', badge: true },
   { path: '/admin/emprunts',     label: 'Emprunts'     },
   { path: '/admin/reservations', label: 'Réservations' },
   { path: '/admin/finances',     label: 'Finances'     },
   { path: '/admin/suggestions',  label: 'Suggestions'  },
   { path: '/admin/settings',     label: 'Paramètres'   },
-  { path: '/admin/dons',           label: 'Dons'         },
 ]
 
 function AdminLayout({ children }) {
-  const loc      = useLocation()
-  const navigate = useNavigate()
+  const loc             = useLocation()
+  const navigate        = useNavigate()
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus()
+  const [pendingMembers, setPendingMembers] = useState(0)
+
+  useEffect(() => {
+    supabase.from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'member')
+      .eq('profile_status', 'en_attente')
+      .then(({ count }) => setPendingMembers(count || 0))
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -47,12 +56,17 @@ function AdminLayout({ children }) {
           <nav className="flex items-center gap-0.5 overflow-x-auto no-scrollbar flex-1 justify-center px-2">
             {navItems.map(item => (
               <Link key={item.path} to={item.path}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                   loc.pathname === item.path
                     ? 'bg-green-700 text-white'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
                 }`}>
                 {item.label}
+                {item.badge && pendingMembers > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {pendingMembers > 9 ? '9+' : pendingMembers}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

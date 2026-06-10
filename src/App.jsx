@@ -16,6 +16,8 @@ import SuggestionsPage       from './pages/admin/SuggestionsPage'
 import SettingsPage          from './pages/admin/SettingsPage'
 import DonationsAdminPage    from './pages/admin/DonationsAdminPage'
 import DonationPage           from './pages/public/DonationPage'
+import ForgotPasswordPage     from './pages/public/ForgotPasswordPage'
+import ResetPasswordPage      from './pages/public/ResetPasswordPage'
 
 function AdminRoute({ children }) {
   const [status, setStatus] = useState('loading')
@@ -53,7 +55,9 @@ function App() {
       <Routes>
         <Route path="/"         element={<CatalogPage />}  />
         <Route path="/login"    element={<LoginPage />}    />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/register"         element={<RegisterPage />} />
+        <Route path="/forgot-password"  element={<ForgotPasswordPage />} />
+        <Route path="/reset-password"   element={<ResetPasswordPage />} />
         <Route path="/profile"  element={<MemberRoute><ProfilePage /></MemberRoute>} />
         <Route path="/admin"               element={<AdminRoute><DashboardPage /></AdminRoute>} />
         <Route path="/admin/livres"        element={<AdminRoute><BooksPage /></AdminRoute>} />
