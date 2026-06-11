@@ -141,6 +141,13 @@ function ProfilePage() {
       setReservations(reservationsRes.data || [])
       setLoading(false)
       loadSuggestions(user.id)
+      // Notifications
+      const { data: nd } = await supabase.from('notifications')
+        .select('id, message, is_read, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(15)
+      setNotifs(nd || [])
     }
     load()
   }, [navigate])
@@ -223,54 +230,42 @@ function ProfilePage() {
             <span className="text-sm font-light">Catalogue</span>
           </button>
           <span className="text-sm font-semibold text-gray-900">Mon espace</span>
-
-          {/* ── Cloche notifications ── */}
-          <div className="relative mr-auto ml-2">
+          <div style={{ position: 'relative', marginLeft: 'auto', marginRight: '8px' }}>
             <button
-              onClick={() => {
-                setShowNotifs(v => !v)
-                // Marquer comme lus
-                const unread = notifs.filter(n => !n.is_read).map(n => n.id)
-                if (unread.length > 0) {
-                  supabase.from('notifications').update({ is_read: true }).in('id', unread)
-                    .then(() => setNotifs(prev => prev.map(n => ({ ...n, is_read: true }))))
-                }
-              }}
-              className="relative p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-colors"
+              onClick={() => setShowNotifs(v => !v)}
+              style={{ position: 'relative', padding: '6px', borderRadius: '10px', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}
             >
-              <Bell className="w-4 h-4" strokeWidth={1.5} />
+              <Bell style={{ width: '16px', height: '16px' }} strokeWidth={1.5} />
               {notifs.some(n => !n.is_read) && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                <span style={{ position: 'absolute', top: '4px', right: '4px', width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', display: 'block' }} />
               )}
             </button>
             {showNotifs && (
-              <div className="absolute left-0 top-full mt-1 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-                  <p className="text-xs font-bold text-gray-700">Notifications</p>
-                  <button onClick={() => setShowNotifs(false)} className="text-gray-300 hover:text-gray-500">
-                    <X className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  </button>
+              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: '4px', width: '280px', background: '#fff', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.12)', border: '1px solid #f3f4f6', zIndex: 50, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f9fafb' }}>
+                  <p style={{ fontSize: '11px', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notifications</p>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
+                <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
                   {notifs.length === 0 ? (
-                    <div className="px-4 py-8 text-center">
-                      <Bell className="w-6 h-6 text-gray-200 mx-auto mb-2" strokeWidth={1} />
-                      <p className="text-xs text-gray-400 font-light">Aucune notification</p>
+                    <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                      <p style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 300 }}>Aucune notification</p>
                     </div>
                   ) : notifs.map(n => (
-                    <div key={n.id} className={"px-4 py-3 border-b border-gray-50 last:border-0 " + (n.is_read ? '' : 'bg-green-50/50')}>
-                      <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
-                      <p className="text-xs text-gray-300 mt-1 font-light">
-                        {new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f9fafb', background: n.is_read ? '#fff' : '#f0fdf4' }}>
+                      <p style={{ fontSize: '12px', color: '#374151', lineHeight: 1.5 }}>{n.message}</p>
+                      <p style={{ fontSize: '11px', color: '#d1d5db', marginTop: '4px' }}>
+                        {new Date(n.created_at).toLocaleDateString('fr-FR')}
                       </p>
                     </div>
                   ))}
                 </div>
+                <button onClick={() => setShowNotifs(false)} style={{ display: 'none' }} />
               </div>
             )}
-            {showNotifs && <div className="fixed inset-0 z-40" onClick={() => setShowNotifs(false)} />}
+            {showNotifs && (
+              <div onClick={() => setShowNotifs(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+            )}
           </div>
-
           <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-rose-500 transition-colors font-light">
             Déconnexion
           </button>
