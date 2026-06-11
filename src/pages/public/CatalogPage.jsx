@@ -130,6 +130,7 @@ function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{'.no-scrollbar::-webkit-scrollbar { display: none !important; }'}</style>
 
       {/* ── En-tête ── */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
@@ -182,7 +183,10 @@ function CatalogPage() {
         </div>
 
         {/* Ligne 3 : Puces catégories — scroll horizontal */}
-        <div className="flex overflow-x-auto whitespace-nowrap gap-2 px-4 pb-3 scrollbar-none">
+        <div
+          className="flex overflow-x-auto whitespace-nowrap gap-2 px-4 pb-3 no-scrollbar"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
           <button
             onClick={() => setActiveCat(null)}
             className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-all font-medium ${
