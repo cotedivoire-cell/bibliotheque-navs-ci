@@ -114,12 +114,23 @@ function ProfilePage() {
   const [savingSug,    setSavingSug]    = useState(false)
   const [sugError,     setSugError]     = useState('')
   const [sugSuccess,   setSugSuccess]   = useState('')
+  const [notifs,       setNotifs]       = useState([])
+  const [showNotifs,   setShowNotifs]   = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { navigate('/login'); return }
       setUserId(user.id)
+
+      // Charger notifications
+      const { data: notifsData } = await supabase
+        .from('notifications')
+        .select('id, message, is_read, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      setNotifs(notifsData || [])
 
       const [profileRes, borrowingsRes, reservationsRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
@@ -197,6 +208,13 @@ function ProfilePage() {
     setSavingSug(false)
   }
 
+  const markAllRead = async () => {
+    const unreadIds = notifs.filter(n => !n.is_read).map(n => n.id)
+    if (unreadIds.length === 0) return
+    await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
+  }
+
   const isGroup  = profile?.account_type === 'group'
   const initials = profile?.full_name?.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?'
   const TABS     = isGroup
@@ -221,6 +239,45 @@ function ProfilePage() {
             <span className="text-sm font-light">Catalogue</span>
           </button>
           <span className="text-sm font-semibold text-gray-900">Mon espace</span>
+          {/* Cloche notifications */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowNotifs(v => !v); if (!showNotifs) markAllRead() }}
+              className="relative p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-colors"
+            >
+              <Bell className="w-4 h-4" strokeWidth={1.5} />
+              {notifs.some(n => !n.is_read) && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+              )}
+            </button>
+            {showNotifs && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowNotifs(false)} />
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 z-40 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-50">
+                    <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
+                  </div>
+                  {notifs.length === 0 ? (
+                    <div className="px-4 py-6 text-center">
+                      <Bell className="w-6 h-6 text-gray-200 mx-auto mb-2" strokeWidth={1} />
+                      <p className="text-xs text-gray-400 font-light">Aucune notification</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-72 overflow-y-auto">
+                      {notifs.map(n => (
+                        <div key={n.id} className={"px-4 py-3 border-b border-gray-50 last:border-0 " + (n.is_read ? '' : 'bg-green-50/40')}>
+                          <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
+                          <p className="text-xs text-gray-300 mt-1 font-light">
+                            {new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-rose-500 transition-colors font-light">
             Déconnexion
           </button>

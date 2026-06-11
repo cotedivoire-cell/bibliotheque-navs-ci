@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Search, User, SlidersHorizontal, X, ChevronRight } from 'lucide-react'
+import { BookOpen, Search, User, SlidersHorizontal, X, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import BookCard from '../../components/BookCard'
 import BookDetailModal from '../../components/BookDetailModal'
@@ -63,6 +63,7 @@ function CatalogPage() {
   const [pendingAuthor,    setPendingAuthor]     = useState('')
   const [pendingAvail,     setPendingAvail]     = useState('all')
   const [showFilterSheet,  setShowFilterSheet]  = useState(false)
+  const [showCatDrop,      setShowCatDrop]      = useState(false)
   const [selectedBook,     setSelectedBook]     = useState(null)
   const [user,             setUser]             = useState(null)
 
@@ -181,27 +182,38 @@ function CatalogPage() {
           </button>
         </div>
 
-        {/* Ligne 3 : Puces catégories — scroll horizontal */}
-        <div className="flex overflow-x-auto whitespace-nowrap gap-2 px-4 pb-3 scrollbar-none">
+        {/* Ligne 3 : Dropdown catégorie compact */}
+        <div className="px-4 pb-3 relative">
           <button
-            onClick={() => setActiveCat(null)}
-            className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-all font-medium ${
-              !activecat ? 'bg-green-800 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            onClick={() => setShowCatDrop(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border transition-all ${
+              activecat ? 'bg-green-700 text-white border-green-700' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
             }`}
           >
-            Tout
+            <span>{activecat ? categories.find(c => c.id === activecat)?.name || 'Catégorie' : 'Toutes les catégories'}</span>
+            <ChevronDown className="w-3.5 h-3.5 opacity-70" strokeWidth={2} />
           </button>
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCat(cat.id === activecat ? null : cat.id)}
-              className={`flex-shrink-0 px-4 py-1.5 text-sm rounded-full transition-all font-medium ${
-                activecat === cat.id ? 'bg-green-800 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
+          {showCatDrop && (
+            <div className="absolute top-full left-4 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 min-w-[200px] overflow-hidden">
+              <button
+                onClick={() => { setActiveCat(null); setShowCatDrop(false) }}
+                className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 ${!activecat ? 'font-semibold text-green-700' : 'text-gray-700'}`}
+              >
+                Toutes les catégories
+              </button>
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => { setActiveCat(cat.id === activecat ? null : cat.id); setShowCatDrop(false) }}
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 border-t border-gray-50 ${activecat === cat.id ? 'font-semibold text-green-700' : 'text-gray-700'}`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Fermer dropdown en cliquant ailleurs */}
+          {showCatDrop && <div className="fixed inset-0 z-20" onClick={() => setShowCatDrop(false)} />}
         </div>
       </div>
 
