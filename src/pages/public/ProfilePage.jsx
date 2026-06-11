@@ -1,3 +1,4 @@
+import NotificationBell from '../../components/NotificationBell'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -95,68 +96,6 @@ function LoanCard({ borrowing }) {
   )
 }
 
-
-function BellButton({ notifs, showNotifs, setShowNotifs, supabase, setNotifs }) {
-  const unreadCount = notifs.filter(n => !n.is_read).length
-
-  const handleOpen = async () => {
-    setShowNotifs(v => !v)
-    if (!showNotifs && unreadCount > 0) {
-      const ids = notifs.filter(n => !n.is_read).map(n => n.id)
-      await supabase.from('notifications').update({ is_read: true }).in('id', ids)
-      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
-    }
-  }
-
-  return (
-    <div className="relative">
-      <button
-        onClick={handleOpen}
-        className="relative p-1.5 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-xl transition-colors"
-      >
-        <Bell className="w-4 h-4" strokeWidth={1.5} />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full block" />
-        )}
-      </button>
-
-      {showNotifs && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setShowNotifs(false)}
-          />
-          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-50">
-              <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Notifications</p>
-            </div>
-            <div className="max-h-60 overflow-y-auto">
-              {notifs.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <Bell className="w-6 h-6 text-gray-200 mx-auto mb-2" strokeWidth={1} />
-                  <p className="text-xs text-gray-400 font-light">Aucune notification</p>
-                </div>
-              ) : (
-                notifs.map((n, i) => (
-                  <div
-                    key={n.id}
-                    className={"px-4 py-3 " + (i < notifs.length - 1 ? "border-b border-gray-50 " : "") + (n.is_read ? "" : "bg-green-50")}
-                  >
-                    <p className="text-xs text-gray-700 leading-relaxed">{n.message}</p>
-                    <p className="text-xs text-gray-300 mt-1">
-                      {new Date(n.created_at).toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 function ProfilePage() {
   const navigate = useNavigate()
   const [activeTab,    setActiveTab]    = useState('Emprunts')
@@ -176,8 +115,6 @@ function ProfilePage() {
   const [savingSug,    setSavingSug]    = useState(false)
   const [sugError,     setSugError]     = useState('')
   const [sugSuccess,   setSugSuccess]   = useState('')
-  const [notifs,     setNotifs]     = useState([])
-  const [showNotifs, setShowNotifs] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -203,14 +140,6 @@ function ProfilePage() {
       setReservations(reservationsRes.data || [])
       setLoading(false)
       loadSuggestions(user.id)
-      try {
-        const { data: nd } = await supabase.from('notifications')
-          .select('id, message, is_read, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(15)
-        setNotifs(nd || [])
-      } catch (_) {}
     }
     load()
   }, [navigate])
@@ -293,7 +222,7 @@ function ProfilePage() {
             <span className="text-sm font-light">Catalogue</span>
           </button>
           <span className="text-sm font-semibold text-gray-900">Mon espace</span>
-          <BellButton notifs={notifs} showNotifs={showNotifs} setShowNotifs={setShowNotifs} supabase={supabase} setNotifs={setNotifs} />
+          <NotificationBell userId={userId} />
           <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-rose-500 transition-colors font-light">
             Déconnexion
           </button>
