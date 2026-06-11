@@ -99,7 +99,7 @@ function AdminReservationsPage() {
     const bookTitle = reservation.books?.title || 'votre livre'
     await supabase.from('notifications').insert([{
       user_id: reservation.member_id,
-      message: "Votre réservation pour "" + bookTitle + "" a été confirmée. Venez le récupérer au bureau des Navigateurs.",
+      message: `Votre réservation pour "${bookTitle}" a été confirmée. Venez le récupérer au bureau des Navigateurs.`,
     }])
     setUpdating(null)
     loadReservations()
