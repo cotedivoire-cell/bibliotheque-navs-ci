@@ -42,7 +42,7 @@ export default function NotificationBell({ userId }) {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div className="relative">
 
       {/* ── Bouton cloche ── */}
       <button
@@ -71,12 +71,7 @@ export default function NotificationBell({ userId }) {
             style={{ position: 'fixed', inset: 0, zIndex: 40 }}
           />
 
-          <div style={{
-            position: 'absolute', right: 0, top: '100%', marginTop: '8px',
-            width: '288px', background: '#fff', borderRadius: '16px',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.12)', border: '1px solid #f3f4f6',
-            zIndex: 50, overflow: 'hidden',
-          }}>
+          <div className="absolute right-0 mt-2 w-80 z-50 origin-top-right bg-white rounded-2xl border border-gray-100 overflow-hidden" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.12)' }}>
             {/* Header panel */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
