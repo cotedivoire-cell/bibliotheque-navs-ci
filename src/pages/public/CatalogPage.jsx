@@ -275,7 +275,7 @@ function CatalogPage() {
                 </div>
 
                 {/* Ligne horizontale de livres */}
-                <div className="flex items-start overflow-x-auto gap-4 px-4 pb-2 scrollbar-none">
+                <div className="flex items-start overflow-x-auto gap-4 px-4 pb-2 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {shelf.books.map(book => (
                     <ShelfCard key={book.id} book={book} onClick={setSelectedBook} />
                   ))}
