@@ -251,12 +251,14 @@ function ProfilePage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Nom complet</label>
                 <input type="text" value={editForm.full_name}
                   onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))}
+                  disabled
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Téléphone</label>
                 <input type="text" value={editForm.phone}
                   onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                  disabled
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
               </div>
               <div className="flex gap-2 justify-end pt-1">
@@ -264,6 +266,9 @@ function ProfilePage() {
                   className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                   <X className="w-3 h-3" />Annuler
                 </button>
+                <p className="text-xs text-gray-400 font-light leading-relaxed">
+                  Pour modifier vos informations de contact, veuillez vous adresser directement au bureau de la bibliothèque.
+                </p>
                 <button onClick={handleSaveProfile} disabled={savingEdit}
                   className="flex items-center gap-1.5 px-4 py-2 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 disabled:opacity-50 transition-colors">
                   <Check className="w-3 h-3" />{savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
