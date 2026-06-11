@@ -134,6 +134,10 @@ function ProfilePage() {
       ])
 
       setProfile(profileRes.data)
+      // Sélectionner automatiquement l'onglet groupe si compte de type groupe
+      if (profileRes.data?.account_type === 'group') {
+        setActiveTab('Emprunts de groupe')
+      }
       const all = borrowingsRes.data || []
       setActive(all.filter(b => ['en_cours', 'en_retard'].includes(b.status)))
       setHistory(all.filter(b => b.status === 'retourné'))
