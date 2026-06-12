@@ -138,7 +138,9 @@ function BookDetailModal({ book, onClose }) {
         const maxAllowed = profileRes.data.max_borrowings || 2
         setBorrowLimit((activeBorrows || 0) >= maxAllowed)
       }
-      setCanReview(!!hasReturnedRes.data)
+      // Option B : tout membre actif peut laisser un avis
+      const isActive = profileRes.data?.profile_status !== 'en_attente' && !profileRes.data?.is_blocked
+      setCanReview(isActive)
       setHasReviewed(!!hasReviewedRes.data)
       if (hasReviewedRes.data) {
         setMyReview(hasReviewedRes.data)
