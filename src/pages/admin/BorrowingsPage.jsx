@@ -43,10 +43,12 @@ function BorrowingsPage() {
   const [newDueDate,    setNewDueDate]    = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting,      setDeleting]      = useState(null)
-  const [scanMode,      setScanMode]      = useState(null)
-  const [scanMsg,       setScanMsg]       = useState('')
-  const [scanSuccess,   setScanSuccess]   = useState(false)
-  const [scanLoading,   setScanLoading]   = useState(false)
+  const [scanMode,        setScanMode]        = useState(null)
+  const [scanMsg,         setScanMsg]         = useState('')
+  const [scanSuccess,     setScanSuccess]     = useState(false)
+  const [scanLoading,     setScanLoading]     = useState(false)
+  const [multiReturn,     setMultiReturn]     = useState(null)  // { book, borrowers[] }
+  const [returningBorrow, setReturningBorrow] = useState(null)
   const [groupActiveCount, setGroupActiveCount] = useState(0)
   const [page, setPage] = useState(1)
 
@@ -144,18 +146,35 @@ function BorrowingsPage() {
         setForm(p => ({ ...p, book_id: book.id })); setShowForm(true); setScanSuccess(true)
         setScanMsg(`Livre détecté : "${book.title}" — complétez le formulaire.`)
       } else if (mode === 'return') {
-        let activeBorrow = null
         if (isOnline) {
-          const { data } = await supabase.from('borrowings').select('*, profiles(full_name)').eq('book_id', book.id).in('status', ['en_cours', 'en_retard']).order('borrowed_at', { ascending: true }).limit(1).maybeSingle()
-          activeBorrow = data
+          const { data: activeBorrows } = await supabase
+            .from('borrowings')
+            .select('*, profiles(full_name, phone)')
+            .eq('book_id', book.id)
+            .in('status', ['en_cours', 'en_retard'])
+            .order('borrowed_at', { ascending: true })
+          if (!activeBorrows || activeBorrows.length === 0) {
+            setScanMsg(`"${book.title}" n'a aucun emprunt actif.`)
+            setScanLoading(false); return
+          }
+          if (activeBorrows.length === 1) {
+            // Un seul emprunteur → retour immédiat
+            await processReturn(activeBorrows[0], book)
+            setScanSuccess(true)
+            setScanMsg(`Retour validé — "${book.title}" par ${activeBorrows[0].profiles?.full_name || '—'}.`)
+          } else {
+            // Plusieurs emprunteurs → afficher le choix
+            setMultiReturn({ book, borrowers: activeBorrows })
+            setScanMsg(`${activeBorrows.length} emprunteurs actifs pour "${book.title}". Choisissez qui rend le livre.`)
+          }
         } else {
           const cached = await getCachedBorrowings()
-          activeBorrow = cached.find(b => b.book_id === book.id && ['en_cours', 'en_retard', 'offline'].includes(b.status))
+          const activeBorrow = cached.find(b => b.book_id === book.id && ['en_cours', 'en_retard', 'offline'].includes(b.status))
+          if (!activeBorrow) { setScanMsg(`"${book.title}" n'a aucun emprunt actif.`); setScanLoading(false); return }
+          await processReturn(activeBorrow, book)
+          setScanSuccess(true)
+          setScanMsg(`Retour validé — "${book.title}".`)
         }
-        if (!activeBorrow) { setScanMsg(`"${book.title}" n'a aucun emprunt actif.`); setScanLoading(false); return }
-        await processReturn(activeBorrow, book)
-        setScanSuccess(true)
-        setScanMsg(`Retour validé — "${book.title}" par ${activeBorrow.profiles?.full_name || activeBorrow._member_name}.`)
       }
     } catch { setScanMsg('Erreur. Réessayez.') }
     setScanLoading(false)
@@ -197,7 +216,7 @@ function BorrowingsPage() {
       const bookTitle = book?.title || 'votre livre'
       await supabase.from('notifications').insert([{
         user_id: borrowing.member_id,
-        message: `Le retour de "${bookTitle}" a bien été enregistré. Merci !`,
+        message: "Le retour de "" + bookTitle + "" a bien été enregistré. Merci !",
       }])
     } else {
       await enqueue({ type: 'RETURN_BOOK', data: { borrowingId: borrowing.id, bookId, returnedAt: TODAY, newAvailableCopies: newAvail } })
@@ -209,6 +228,15 @@ function BorrowingsPage() {
   }
 
   const handleReturn   = (b) => processReturn(b)
+
+  const handleMultiReturn = async (borrowing) => {
+    setReturningBorrow(borrowing.id)
+    await processReturn(borrowing, multiReturn?.book)
+    setScanSuccess(true)
+    setScanMsg(`Retour validé — "${multiReturn?.book?.title}" par ${borrowing.profiles?.full_name || '—'}.`)
+    setMultiReturn(null)
+    setReturningBorrow(null)
+  }
   const handleSaveDate = async (id) => {
     if (!newDueDate) return
     await supabase.from('borrowings').update({ due_date: newDueDate, status: newDueDate >= TODAY ? 'en_cours' : 'en_retard' }).eq('id', id)
@@ -235,6 +263,43 @@ function BorrowingsPage() {
   return (
     <AdminLayout>
       {scanMode && <BookScanner title={scanMode === 'borrow' ? 'Scanner pour emprunt' : 'Scanner pour retour rapide'} onResult={handleScanResult} onClose={() => { setScanMode(null); scanModeRef.current = null }} />}
+
+      {/* ── Sélection emprunteur — plusieurs retours possibles ── */}
+      {multiReturn && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setMultiReturn(null)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 bg-white rounded-3xl shadow-2xl p-6 max-w-sm mx-auto">
+            <h3 className="text-base font-bold text-slate-900 mb-1">Qui rend ce livre ?</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              <span className="font-medium text-green-700">"{multiReturn.book?.title}"</span> — {multiReturn.borrowers.length} emprunts actifs
+            </p>
+            <div className="space-y-2">
+              {multiReturn.borrowers.map(b => (
+                <button key={b.id}
+                  onClick={() => handleMultiReturn(b)}
+                  disabled={returningBorrow === b.id}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-green-50 border border-slate-200 hover:border-green-300 rounded-2xl transition-all disabled:opacity-50"
+                >
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-slate-900">{b.profiles?.full_name || '—'}</p>
+                    <p className="text-xs text-slate-400">
+                      Retour prévu : {new Date(b.due_date).toLocaleDateString('fr-FR')}
+                      {new Date(b.due_date) < new Date() && <span className="text-red-500 ml-1">· En retard</span>}
+                    </p>
+                  </div>
+                  {returningBorrow === b.id
+                    ? <span className="text-xs text-slate-400">...</span>
+                    : <span className="text-xs text-green-700 font-medium">Valider →</span>
+                  }
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setMultiReturn(null)} className="mt-4 w-full text-xs text-slate-400 hover:text-slate-600 transition-colors">
+              Annuler
+            </button>
+          </div>
+        </>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
         <div>
