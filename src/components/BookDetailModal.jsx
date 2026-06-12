@@ -70,13 +70,17 @@ function BookDetailModal({ book, onClose }) {
   const [hasReservation,  setHasReservation]  = useState(false)
   const [realStock,       setRealStock]       = useState(null)
   const [borrowLimit,     setBorrowLimit]     = useState(false)
+  const [currentBook,    setCurrentBook]    = useState(book)
   const [summaryExpanded, setSummaryExpanded] = useState(false)
   const [imgError,        setImgError]        = useState(false)
   const [borrowFee,       setBorrowFee]       = useState(500)
   const [borrowDuration,  setBorrowDuration]  = useState(14)
 
+  // Sync currentBook quand la prop book change (ouverture depuis le catalogue)
+  useEffect(() => { if (book) setCurrentBook(book) }, [book])
+
   useEffect(() => {
-    if (book) {
+    if (currentBook) {
       document.body.style.overflow = 'hidden'
       setTimeout(() => setVisible(true), 10)
       setImgError(false)
@@ -84,13 +88,15 @@ function BookDetailModal({ book, onClose }) {
       setShowReserveForm(false)
       setReserveResult(null)
       setReserveError('')
-      loadData()
+      loadData(currentBook)
     }
     return () => { document.body.style.overflow = '' }
-  }, [book])
+  }, [currentBook?.id])
 
-  const loadData = async () => {
-    if (!book) return
+  const loadData = async (bk) => {
+    const bookToLoad = bk || currentBook || book
+    if (!bookToLoad) return
+    const book = bookToLoad  // alias local pour ne pas réécrire tout le corps
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
 
@@ -147,6 +153,29 @@ function BookDetailModal({ book, onClose }) {
         setReviewForm({ rating: hasReviewedRes.data.rating || 0, comment: hasReviewedRes.data.comment || '' })
       }
       setHasReservation(!!hasReservationRes.data || !!memberBorrowRes.data)
+    }
+  }
+
+  const handleRecoClick = async (reco) => {
+    // Reset tous les états d'affichage
+    setVisible(false)
+    setShowReserveForm(false)
+    setReserveResult(null)
+    setReserveError('')
+    setShowReviewForm(false)
+    setSummaryExpanded(false)
+    setShowAllReviews(false)
+    setImgError(false)
+    setBorrowLimit(false)
+    setRealStock(null)
+    // Charger le livre complet depuis Supabase
+    const { data: fullBook } = await supabase
+      .from('books')
+      .select('*')
+      .eq('id', reco.id)
+      .single()
+    if (fullBook) {
+      setCurrentBook(fullBook)
     }
   }
 
@@ -606,15 +635,18 @@ function BookDetailModal({ book, onClose }) {
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Dans la même catégorie</h3>
               <div className="grid grid-cols-3 gap-3">
                 {recommendations.map(rec => (
-                  <div key={rec.id} className="text-center">
-                    <div className="w-full aspect-[2/3] bg-gray-100 overflow-hidden mb-1">
+                  <div key={rec.id}
+                    onClick={() => handleRecoClick(rec)}
+                    className="text-center cursor-pointer group">
+                    <div className="w-full aspect-[2/3] bg-gray-100 overflow-hidden mb-1 transition-transform duration-200 group-hover:scale-[1.03] group-hover:shadow-lg">
                       {rec.cover_url
-                        ? <img src={rec.cover_url} alt={rec.title} className="w-full h-full object-cover shadow-[4px_4px_12px_rgba(0,0,0,0.10)]" style={{ borderRadius: 0, boxShadow: "4px 4px 12px rgba(0,0,0,0.10)" }} />
+                        ? <img src={rec.cover_url} alt={rec.title} className="w-full h-full object-cover" style={{ borderRadius: 0 }} />
                         : <div className="w-full h-full bg-gradient-to-br from-green-900 to-green-700 flex items-center justify-center">
                             <span className="text-white/70 text-sm font-bold">{rec.title?.slice(0,1)}</span>
                           </div>
                       }
                     </div>
+                    <p className="text-xs text-green-700 opacity-0 group-hover:opacity-100 transition-opacity font-medium mt-0.5">Voir →</p>
                     <p className="text-xs font-medium text-gray-800 line-clamp-2 leading-tight">{rec.title}</p>
                     <p className="text-xs text-gray-400 truncate">{rec.author}</p>
                   </div>
