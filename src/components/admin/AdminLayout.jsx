@@ -47,7 +47,7 @@ function AdminLayout({ children }) {
       <OfflineBanner isOnline={isOnline} pendingCount={pendingCount} isSyncing={isSyncing} />
 
       {/* ── Header ── */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm">
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm relative">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
 
           {/* Logo */}
@@ -110,9 +110,9 @@ function AdminLayout({ children }) {
           </div>
         </div>
 
-        {/* ── Menu mobile déroulant ── */}
+        {/* ── Menu mobile déroulant — flottant, ne pousse pas le contenu ── */}
         {menuOpen && (
-          <div className="md:hidden border-t border-slate-100 bg-white px-4 py-3 space-y-1 shadow-lg">
+          <div className="md:hidden absolute top-full left-0 right-0 border-t border-slate-100 bg-white px-4 py-3 space-y-1 shadow-xl z-50">
             {navItems.map(item => (
               <Link key={item.path} to={item.path}
                 className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
