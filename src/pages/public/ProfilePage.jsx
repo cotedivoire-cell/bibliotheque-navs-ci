@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Pencil, X, Check, ThumbsUp, Users,
-  BookOpen, Clock, AlertCircle, BookMarked, History, Lightbulb
+  BookOpen, Clock, AlertCircle, BookMarked, History, Lightbulb,
+  Heart, ChevronRight, MessageCircle
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
@@ -134,10 +135,7 @@ function ProfilePage() {
       ])
 
       setProfile(profileRes.data)
-      // Sélectionner automatiquement l'onglet groupe si compte de type groupe
-      if (profileRes.data?.account_type === 'group') {
-        setActiveTab('Emprunts de groupe')
-      }
+      if (profileRes.data?.account_type === 'group') setActiveTab('Emprunts de groupe')
       const all = borrowingsRes.data || []
       setActive(all.filter(b => ['en_cours', 'en_retard'].includes(b.status)))
       setHistory(all.filter(b => b.status === 'retourné'))
@@ -252,26 +250,26 @@ function ProfilePage() {
                 <input type="text" value={editForm.full_name}
                   onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))}
                   disabled
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
+                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-500 cursor-not-allowed" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Téléphone</label>
                 <input type="text" value={editForm.phone}
                   onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
                   disabled
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
+                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-500 cursor-not-allowed" />
               </div>
               <div className="pt-2 space-y-2">
                 <p className="text-xs text-gray-400 font-light leading-relaxed italic">
                   Pour modifier vos informations de contact, veuillez vous adresser directement au bureau des Navigateurs.
                 </p>
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-3 justify-end">
                   <button onClick={() => setIsEditing(false)}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-2 py-1">
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
                     Annuler
                   </button>
                   <button onClick={handleSaveProfile} disabled={savingEdit}
-                    className="text-xs text-green-700 hover:text-green-800 font-medium transition-colors px-2 py-1 disabled:opacity-50">
+                    className="text-xs text-green-700 hover:text-green-800 font-medium transition-colors disabled:opacity-50">
                     {savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
                   </button>
                 </div>
@@ -308,6 +306,21 @@ function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* ── Bannière compte en attente ── */}
+        {profile?.profile_status === 'en_attente' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Clock className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" strokeWidth={1.5} />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Compte en attente d'activation</p>
+                <p className="text-xs text-amber-700 leading-relaxed mt-0.5">
+                  Contactez le bureau des Navigateurs pour finaliser votre inscription.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Bouton Soutenir ── */}
         <button
