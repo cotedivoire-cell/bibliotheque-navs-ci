@@ -112,7 +112,7 @@ function AdminLayout({ children }) {
 
         {/* ── Menu mobile déroulant — flottant, ne pousse pas le contenu ── */}
         {menuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 border-t border-slate-100 bg-white px-4 py-3 space-y-1 shadow-xl z-50">
+          <div className="md:hidden absolute top-full right-3 mt-1 w-56 border border-slate-100 bg-white rounded-2xl px-2 py-2 space-y-0.5 shadow-xl z-50">
             {navItems.map(item => (
               <Link key={item.path} to={item.path}
                 className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
