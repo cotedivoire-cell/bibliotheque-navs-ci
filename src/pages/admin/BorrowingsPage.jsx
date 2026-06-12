@@ -216,7 +216,7 @@ function BorrowingsPage() {
       const bookTitle = book?.title || 'votre livre'
       await supabase.from('notifications').insert([{
         user_id: borrowing.member_id,
-        message: "Le retour de "" + bookTitle + "" a bien été enregistré. Merci !",
+        message: `Le retour de "${bookTitle}" a bien été enregistré. Merci !`,
       }])
     } else {
       await enqueue({ type: 'RETURN_BOOK', data: { borrowingId: borrowing.id, bookId, returnedAt: TODAY, newAvailableCopies: newAvail } })
