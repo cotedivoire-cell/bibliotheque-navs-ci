@@ -258,14 +258,15 @@ function BookDetailModal({ book, onClose }) {
   const feeLabel  = isAnnual ? 'Inclus (Abonné)' : `${borrowFee.toLocaleString('fr-FR')} FCFA`
   const todayFmt  = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  if (!book) return null
+  const displayBook = currentBook || book
+  if (!displayBook) return null
   const handleClose = () => { setVisible(false); setTimeout(onClose, 300) }
 
-  const stockOk   = realStock === null ? book.available_copies > 0 : realStock > 0
+  const stockOk   = realStock === null ? displayBook.available_copies > 0 : realStock > 0
   const isPending = userProfile?.profile_status === 'en_attente'
   const isBlocked = userProfile?.is_blocked
-  const hasCover  = book.cover_url && !imgError
-  const longSummary = book.summary && book.summary.length > 220
+  const hasCover  = displayBook.cover_url && !imgError
+  const longSummary = displayBook.summary && displayBook.summary.length > 220
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -289,8 +290,8 @@ function BookDetailModal({ book, onClose }) {
         <div className="bg-gray-50 flex items-center justify-center py-8 px-6 mt-2">
           {hasCover ? (
             <img
-              src={book.cover_url}
-              alt={book.title}
+              src={displayBook.cover_url}
+              alt={displayBook.title}
               onError={() => setImgError(true)}
               className="max-h-60 w-auto shadow-[8px_8px_24px_rgba(0,0,0,0.18)]"
               style={{ borderRadius: 0, display: 'block' }}
@@ -298,7 +299,7 @@ function BookDetailModal({ book, onClose }) {
           ) : (
             <div className="w-36 h-52 bg-gradient-to-br from-green-950 via-green-800 to-emerald-900 flex flex-col items-center justify-center gap-2 shadow-[8px_8px_24px_rgba(0,0,0,0.18)]">
               <span className="text-white/90 text-3xl font-bold">
-                {book.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()}
+                {displayBook.title?.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()}
               </span>
               <div className="w-8 h-px bg-white/20" />
               <span className="text-white/30 text-[9px] tracking-widest uppercase">Navs CI</span>
@@ -310,13 +311,13 @@ function BookDetailModal({ book, onClose }) {
 
           {/* ── Titre, auteur, badges ── */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 leading-snug">{book.title}</h2>
-            <p className="text-gray-500 text-sm mt-1 font-light capitalize">{book.author}</p>
+            <h2 className="text-lg font-semibold text-gray-900 leading-snug">{displayBook.title}</h2>
+            <p className="text-gray-500 text-sm mt-1 font-light capitalize">{displayBook.author}</p>
 
             {/* Badges harmonisés */}
             <div className="flex flex-wrap gap-2 mt-3">
               <span className={`rounded-full border text-xs px-3 py-1 ${stockOk ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-400'}`}>
-                {stockOk ? `${realStock ?? book.available_copies} ex. disponible${(realStock ?? book.available_copies) > 1 ? "s" : ""}` : 'Indisponible'}
+                {stockOk ? `${realStock ?? displayBook.available_copies} ex. disponible${(realStock ?? displayBook.available_copies) > 1 ? "s" : ""}` : 'Indisponible'}
               </span>
               {book.categories?.name && (
                 <span className="rounded-full border border-gray-200 text-gray-500 text-xs px-3 py-1">
@@ -324,7 +325,7 @@ function BookDetailModal({ book, onClose }) {
                 </span>
               )}
               <span className="rounded-full border border-gray-200 text-gray-500 text-xs px-3 py-1">
-                {LANG[book.language] || 'Français'}
+                {LANG[displayBook.language] || 'Français'}
               </span>
             </div>
 
@@ -339,11 +340,11 @@ function BookDetailModal({ book, onClose }) {
           </div>
 
           {/* ── Résumé avec expand/collapse ── */}
-          {book.summary && (
+          {displayBook.summary && (
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-2">Résumé</h3>
               <p className={`text-gray-600 text-sm leading-relaxed ${!summaryExpanded && longSummary ? 'line-clamp-4' : ''}`}>
-                {book.summary}
+                {displayBook.summary}
               </p>
               {longSummary && (
                 <button
@@ -635,7 +636,7 @@ function BookDetailModal({ book, onClose }) {
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Dans la même catégorie</h3>
               <div className="grid grid-cols-3 gap-3">
-                {recommendations.filter(r => r.id !== (currentBook?.id || book?.id)).map(rec => (
+                {recommendations.filter(r => r.id !== (currentBook?.id || displayBook?.id)).map(rec => (
                   <div key={rec.id}
                     onClick={() => handleRecoClick(rec)}
                     className="text-center cursor-pointer group">
