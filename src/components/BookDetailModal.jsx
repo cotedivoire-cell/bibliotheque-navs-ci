@@ -66,6 +66,7 @@ function BookDetailModal({ book, onClose }) {
   const [reserveError,    setReserveError]    = useState('')
   const [hasReservation,  setHasReservation]  = useState(false)
   const [realStock,       setRealStock]       = useState(null)
+  const [borrowLimit,     setBorrowLimit]     = useState(false)
   const [summaryExpanded, setSummaryExpanded] = useState(false)
   const [imgError,        setImgError]        = useState(false)
   const [borrowFee,       setBorrowFee]       = useState(500)
@@ -117,13 +118,23 @@ function BookDetailModal({ book, onClose }) {
 
     if (user) {
       const [profileRes, hasReturnedRes, hasReviewedRes, hasReservationRes, memberBorrowRes] = await Promise.all([
-        supabase.from('profiles').select('is_blocked, profile_status').eq('id', user.id).single(),
+        supabase.from('profiles').select('is_blocked, profile_status, account_type, max_borrowings').eq('id', user.id).single(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'retourné').limit(1).maybeSingle(),
         supabase.from('reviews').select('id').eq('member_id', user.id).eq('book_id', book.id).maybeSingle(),
         supabase.from('reservations').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'pending').maybeSingle(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).in('status', ['en_cours', 'en_retard']).maybeSingle(),
       ])
       setUserProfile(profileRes.data)
+      // Vérifier limite emprunts individuels
+      if (profileRes.data && profileRes.data.account_type !== 'group') {
+        const { count: activeBorrows } = await supabase
+          .from('borrowings')
+          .select('id', { count: 'exact', head: true })
+          .eq('member_id', user.id)
+          .in('status', ['en_cours', 'en_retard'])
+        const maxAllowed = profileRes.data.max_borrowings || 2
+        setBorrowLimit((activeBorrows || 0) >= maxAllowed)
+      }
       setCanReview(!!hasReturnedRes.data)
       setHasReviewed(!!hasReviewedRes.data)
       setHasReservation(!!hasReservationRes.data || !!memberBorrowRes.data)
@@ -344,6 +355,14 @@ function BookDetailModal({ book, onClose }) {
                 <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3">
                   <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
                   <p className="text-xs text-amber-800">Vous avez déjà un emprunt ou une réservation active pour ce livre.</p>
+                </div>
+
+              ) : borrowLimit ? (
+                <div className="bg-rose-50 border border-rose-100 rounded-2xl px-4 py-3">
+                  <p className="text-xs text-rose-600 font-medium leading-relaxed">
+                    Limite d'emprunt atteinte (max {userProfile?.max_borrowings || 2} livres).
+                    Veuillez contacter l'administrateur pour basculer en mode groupe.
+                  </p>
                 </div>
 
               ) : isPending ? (

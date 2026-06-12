@@ -95,6 +95,12 @@ function AdminReservationsPage() {
       loan_type: 'location', amount_paid: 0, borrowed_at: TODAY, due_date: dueDateStr, status: 'en_cours',
     }])
     await supabase.from('reservations').update({ status: 'confirmed' }).eq('id', reservation.id)
+    // Notification au membre
+    const bookTitle = reservation.books?.title || 'votre livre'
+    await supabase.from('notifications').insert([{
+      user_id: reservation.member_id,
+      message: `Votre réservation pour "${bookTitle}" a été confirmée. Venez le récupérer au bureau des Navigateurs.`,
+    }])
     setUpdating(null)
     loadReservations()
   }
@@ -103,9 +109,13 @@ function AdminReservationsPage() {
   const handleCancel = async (reservation) => {
     setUpdating(reservation.id)
     await supabase.from('reservations').update({ status: 'cancelled' }).eq('id', reservation.id)
-    // Restituer l'exemplaire
     const { data: book } = await supabase.from('books').select('available_copies').eq('id', reservation.book_id).single()
     if (book) await supabase.from('books').update({ available_copies: book.available_copies + 1 }).eq('id', reservation.book_id)
+    // Notification au membre
+    await supabase.from('notifications').insert([{
+      user_id: reservation.member_id,
+      message: "Votre réservation a été annulée. Contactez le bureau des Navigateurs pour plus d'informations.",
+    }])
     setUpdating(null)
     loadReservations()
   }

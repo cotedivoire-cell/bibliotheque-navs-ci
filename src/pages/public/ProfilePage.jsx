@@ -261,6 +261,7 @@ function ProfilePage() {
                   disabled
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
               </div>
+<<<<<<< HEAD
               <div className="pt-2 space-y-2">
                 <p className="text-xs text-gray-400 font-light leading-relaxed italic">
                   Pour modifier vos informations de contact, veuillez vous adresser directement au bureau des Navigateurs.
@@ -275,6 +276,20 @@ function ProfilePage() {
                     {savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
                   </button>
                 </div>
+=======
+              <div className="flex gap-2 justify-end pt-1">
+                <button onClick={() => setIsEditing(false)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                  <X className="w-3 h-3" />Annuler
+                </button>
+                <p className="text-xs text-gray-400 font-light leading-relaxed">
+                  Pour modifier vos informations de contact, veuillez vous adresser directement au bureau de la bibliothèque.
+                </p>
+                <button onClick={handleSaveProfile} disabled={savingEdit}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 disabled:opacity-50 transition-colors">
+                  <Check className="w-3 h-3" />{savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
+                </button>
+>>>>>>> 22e0b94b4943abd215e71d9c484dc08a109afbff
               </div>
             </div>
           ) : (

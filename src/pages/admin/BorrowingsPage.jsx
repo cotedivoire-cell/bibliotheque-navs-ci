@@ -193,6 +193,12 @@ function BorrowingsPage() {
     if (isOnline) {
       await supabase.from('borrowings').update({ status: 'retourné', returned_at: TODAY }).eq('id', borrowing.id)
       await supabase.from('books').update({ available_copies: newAvail }).eq('id', bookId)
+      // Notification au membre
+      const bookTitle = book?.title || 'votre livre'
+      await supabase.from('notifications').insert([{
+        user_id: borrowing.member_id,
+        message: `Le retour de "${bookTitle}" a bien été enregistré. Merci !`,
+      }])
     } else {
       await enqueue({ type: 'RETURN_BOOK', data: { borrowingId: borrowing.id, bookId, returnedAt: TODAY, newAvailableCopies: newAvail } })
       await updateCachedBorrowing(borrowing.id, { status: 'retourné', returned_at: TODAY })
