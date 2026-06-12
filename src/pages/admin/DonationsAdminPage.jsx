@@ -69,7 +69,7 @@ function DonationsAdminPage() {
   const totalArgent  = donations.filter(d => d.type === 'argent' && d.status === 'traite').reduce((s, d) => s + (d.amount || 0), 0)
   const totalPending = donations.filter(d => d.status === 'en_attente').length
   const totalLivres  = donations.filter(d => d.type === 'livre').length
-  const goalPct      = Math.min(100, Math.round((totalArgent / ANNUAL_GOAL) * 100))
+  const goalPct      = Math.min(100, Math.round((totalArgent / annualGoal) * 100))
 
   const filtered = donations.filter(d => {
     const matchType   = filterType === 'all' || d.type === filterType
