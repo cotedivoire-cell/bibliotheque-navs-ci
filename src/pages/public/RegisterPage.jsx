@@ -13,6 +13,8 @@ function RegisterPage() {
   const [error,   setError]   = useState('')
   const [done,    setDone]    = useState(false)
 
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/
+
   useEffect(() => {
     supabase.from('settings').select('key, value').then(({ data }) => {
       if (data) {
@@ -29,8 +31,13 @@ function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
+
+    if (!form.full_name.trim()) { setError('Le nom complet est requis.'); return }
+    if (!EMAIL_REGEX.test(form.email.trim())) { setError('Adresse email invalide. Vérifiez le format (ex: nom@domaine.com).'); return }
+    if (form.password.length < 6) { setError('Le mot de passe doit contenir au moins 6 caractères.'); return }
+
+    setLoading(true)
 
     const { error: signUpError } = await supabase.auth.signUp({
       email:    form.email.trim(),

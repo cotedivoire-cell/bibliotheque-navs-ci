@@ -59,6 +59,9 @@ function BookDetailModal({ book, onClose }) {
   const [reviewForm,      setReviewForm]      = useState({ rating: 0, comment: '' })
   const [savingReview,    setSavingReview]    = useState(false)
   const [reviewError,     setReviewError]     = useState('')
+  const [showAllReviews, setShowAllReviews] = useState(false)
+  const [myReview,       setMyReview]       = useState(null)
+  const [deletingReview, setDeletingReview] = useState(false)
   const [showReserveForm, setShowReserveForm] = useState(false)
   const [pickupType,      setPickupType]      = useState('self')
   const [savingReserve,   setSavingReserve]   = useState(false)
@@ -120,7 +123,7 @@ function BookDetailModal({ book, onClose }) {
       const [profileRes, hasReturnedRes, hasReviewedRes, hasReservationRes, memberBorrowRes] = await Promise.all([
         supabase.from('profiles').select('is_blocked, profile_status, account_type, max_borrowings').eq('id', user.id).single(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'retourné').limit(1).maybeSingle(),
-        supabase.from('reviews').select('id').eq('member_id', user.id).eq('book_id', book.id).maybeSingle(),
+        supabase.from('reviews').select('id, rating, comment').eq('member_id', user.id).eq('book_id', book.id).maybeSingle(),
         supabase.from('reservations').select('id').eq('member_id', user.id).eq('book_id', book.id).eq('status', 'pending').maybeSingle(),
         supabase.from('borrowings').select('id').eq('member_id', user.id).eq('book_id', book.id).in('status', ['en_cours', 'en_retard']).maybeSingle(),
       ])
@@ -137,8 +140,23 @@ function BookDetailModal({ book, onClose }) {
       }
       setCanReview(!!hasReturnedRes.data)
       setHasReviewed(!!hasReviewedRes.data)
+      if (hasReviewedRes.data) {
+        setMyReview(hasReviewedRes.data)
+        setReviewForm({ rating: hasReviewedRes.data.rating || 0, comment: hasReviewedRes.data.comment || '' })
+      }
       setHasReservation(!!hasReservationRes.data || !!memberBorrowRes.data)
     }
+  }
+
+  const handleDeleteReview = async () => {
+    if (!myReview) return
+    setDeletingReview(true)
+    await supabase.from('reviews').delete().eq('id', myReview.id)
+    setReviews(prev => prev.filter(r => r.id !== myReview.id))
+    setHasReviewed(false)
+    setMyReview(null)
+    setReviewForm({ rating: 0, comment: '' })
+    setDeletingReview(false)
   }
 
   const handleReserve = async () => {
@@ -498,7 +516,7 @@ function BookDetailModal({ book, onClose }) {
               <p className="text-gray-400 italic text-xs">Aucun avis pour l'instant.</p>
             ) : (
               <div className="space-y-3">
-                {reviews.map(rv => (
+                {(showAllReviews ? reviews : reviews.slice(0, 3)).map(rv => (
                   <div key={rv.id} className="bg-gray-50 rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-xs font-medium text-gray-700">{rv.profiles?.full_name}</p>
@@ -508,6 +526,12 @@ function BookDetailModal({ book, onClose }) {
                     <p className="text-xs text-gray-300 mt-1">{new Date(rv.created_at).toLocaleDateString('fr-FR')}</p>
                   </div>
                 ))}
+                {reviews.length > 3 && (
+                  <button onClick={() => setShowAllReviews(v => !v)}
+                    className="text-xs text-green-700 font-medium hover:underline">
+                    {showAllReviews ? 'Voir moins' : `Voir plus d'avis (${reviews.length - 3} de plus)`}
+                  </button>
+                )}
               </div>
             )}
 
@@ -539,7 +563,38 @@ function BookDetailModal({ book, onClose }) {
               </div>
             )}
             {userId && hasReviewed && (
-              <p className="text-xs text-green-600 mt-2">Vous avez déjà laissé un avis pour ce livre.</p>
+              <div className="mt-3">
+                {!showReviewForm ? (
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs text-green-600">Vous avez déjà noté ce livre.</p>
+                    <button onClick={() => setShowReviewForm(true)}
+                      className="text-xs text-blue-600 font-medium hover:underline">
+                      Modifier
+                    </button>
+                    <button onClick={handleDeleteReview} disabled={deletingReview}
+                      className="text-xs text-red-400 hover:text-red-600 font-medium hover:underline disabled:opacity-50">
+                      {deletingReview ? '...' : 'Supprimer'}
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmitReview} className="bg-green-50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-green-800">Modifier votre avis</p>
+                    {reviewError && <p className="text-xs text-red-600">{reviewError}</p>}
+                    <StarInput value={reviewForm.rating} onChange={r => setReviewForm(p => ({ ...p, rating: r }))} />
+                    <textarea value={reviewForm.comment} onChange={e => setReviewForm(p => ({ ...p, comment: e.target.value }))}
+                      placeholder="Commentaire (optionnel)..." rows={2}
+                      className="w-full border border-green-200 rounded-xl px-3 py-2 text-xs focus:outline-none resize-none bg-white" />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setShowReviewForm(false)}
+                        className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg">Annuler</button>
+                      <button type="submit" disabled={savingReview}
+                        className="px-4 py-1.5 text-xs text-white bg-green-700 rounded-lg disabled:opacity-50">
+                        {savingReview ? '...' : 'Mettre à jour'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             )}
           </div>
 
