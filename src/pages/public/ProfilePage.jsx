@@ -1,3 +1,4 @@
+import NotificationBell from '../../components/NotificationBell'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -133,6 +134,10 @@ function ProfilePage() {
       ])
 
       setProfile(profileRes.data)
+      // Sélectionner automatiquement l'onglet groupe si compte de type groupe
+      if (profileRes.data?.account_type === 'group') {
+        setActiveTab('Emprunts de groupe')
+      }
       const all = borrowingsRes.data || []
       setActive(all.filter(b => ['en_cours', 'en_retard'].includes(b.status)))
       setHistory(all.filter(b => b.status === 'retourné'))
@@ -221,6 +226,7 @@ function ProfilePage() {
             <span className="text-sm font-light">Catalogue</span>
           </button>
           <span className="text-sm font-semibold text-gray-900">Mon espace</span>
+          <NotificationBell userId={userId} />
           <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-rose-500 transition-colors font-light">
             Déconnexion
           </button>
@@ -245,23 +251,30 @@ function ProfilePage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Nom complet</label>
                 <input type="text" value={editForm.full_name}
                   onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))}
+                  disabled
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Téléphone</label>
                 <input type="text" value={editForm.phone}
                   onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                  disabled
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-700 focus:border-green-700 transition-all" />
               </div>
-              <div className="flex gap-2 justify-end pt-1">
-                <button onClick={() => setIsEditing(false)}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                  <X className="w-3 h-3" />Annuler
-                </button>
-                <button onClick={handleSaveProfile} disabled={savingEdit}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs text-white bg-green-700 rounded-xl hover:bg-green-800 disabled:opacity-50 transition-colors">
-                  <Check className="w-3 h-3" />{savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
-                </button>
+              <div className="pt-2 space-y-2">
+                <p className="text-xs text-gray-400 font-light leading-relaxed italic">
+                  Pour modifier vos informations de contact, veuillez vous adresser directement au bureau des Navigateurs.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setIsEditing(false)}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-2 py-1">
+                    Annuler
+                  </button>
+                  <button onClick={handleSaveProfile} disabled={savingEdit}
+                    className="text-xs text-green-700 hover:text-green-800 font-medium transition-colors px-2 py-1 disabled:opacity-50">
+                    {savingEdit ? 'Sauvegarde...' : 'Enregistrer'}
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -295,6 +308,23 @@ function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* ── Bouton Soutenir ── */}
+        <button
+          onClick={() => navigate('/don')}
+          className="w-full flex items-center justify-between bg-gradient-to-r from-green-700 to-emerald-700 text-white rounded-2xl px-5 py-4 hover:from-green-800 hover:to-emerald-800 transition-all shadow-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Heart className="w-4 h-4 text-white" strokeWidth={1.5} />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold">Soutenir la bibliothèque</p>
+              <p className="text-xs text-green-200 font-light">Faire un don financier ou offrir un livre</p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-green-300 flex-shrink-0" strokeWidth={1.5} />
+        </button>
 
         {/* ── Onglets ── */}
         <div className="flex gap-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-1">
