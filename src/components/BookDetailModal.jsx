@@ -157,6 +157,7 @@ function BookDetailModal({ book, onClose }) {
   }
 
   const handleRecoClick = async (reco) => {
+    if (reco.id === (currentBook?.id || book?.id)) return // déjà affiché
     // Reset tous les états d'affichage
     setVisible(false)
     setShowReserveForm(false)
@@ -634,7 +635,7 @@ function BookDetailModal({ book, onClose }) {
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Dans la même catégorie</h3>
               <div className="grid grid-cols-3 gap-3">
-                {recommendations.map(rec => (
+                {recommendations.filter(r => r.id !== (currentBook?.id || book?.id)).map(rec => (
                   <div key={rec.id}
                     onClick={() => handleRecoClick(rec)}
                     className="text-center cursor-pointer group">
